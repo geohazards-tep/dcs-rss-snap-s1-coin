@@ -635,7 +635,7 @@ function propertiesFileCratorTIF_IFG(){
     local snapVersion=$7
     local processingTime=$8
 
-    outputProductTIF_basename=$(basename "${outputProductPNG}")
+    outputProductTIF_basename=$(basename "${outputProductTif}")
     properties_filename=${outputProductTif}.properties
 
     cat << EOF > ${properties_filename}
@@ -673,13 +673,13 @@ function propertiesFileCratorTIF_OneBand(){
     local snapVersion=$5
     local processingTime=$6
 
-    outputProductTIF_basename=$(basename "${outputProductPNG}")
+    outputProductTIF_basename=$(basename "${outputProductTif}")
     properties_filename=${outputProductTif}.properties
 
     cat << EOF > ${properties_filename}
 title=${outputProductTIF_basename}
 description=${description}
-productDate=${dateStart}
+productDate=${date}
 polarisation=${polarisation}
 snapVersion=${snapVersion}
 processingTime=${processingTime}
@@ -1092,26 +1092,26 @@ function main() {
     ciop-log "DEBUG" "Coherence properties file created: ${outputCohTIF_properties}"
 
     # create properties file for Intensity average tif product
-    descriptionSigmaAverage="Intesity average in dB computed on the input SLC couple"
+    descriptionSigmaAverage="Intensity average in dB computed on the input SLC couple"
     outputSigmaAverageTIF_properties=$( propertiesFileCratorTIF_IFG "${sigmaAverageName_TIF}" "${descriptionSigmaAverage}" "${dateMaster}" "${dateSlave}" "${dateDiff_days}" "${polarisation}" "${SNAP_VERSION}" "${processingTime}" )
     # report activity in the log
     ciop-log "DEBUG" "Backscatter average properties file created: ${outputSigmaAverageTIF_properties}"
 
     # create properties file for Intensity difference average tif product
-    descriptionSigmaDiff="Intesity difference in dB computed on the input SLC couple"
+    descriptionSigmaDiff="Intensity difference in dB computed on the input SLC couple"
     outputSigmaDiffTIF_properties=$( propertiesFileCratorTIF_IFG "${sigmaDiffName_TIF}" "${descriptionSigmaDiff}" "${dateMaster}" "${dateSlave}" "${dateDiff_days}" "${polarisation}" "${SNAP_VERSION}" "${processingTime}" )
     # report activity in the log
     ciop-log "DEBUG" "Backscatter difference properties file created: ${outputSigmaDiffTIF_properties}"
 
     # create properties file for Intensity average tif product
-    descriptionSigmaMaster="Intesity in dB of the Master product"
+    descriptionSigmaMaster="Intensity in dB of the Master product"
     sigmaMasterName_TIF=${sigmaMasterName}.tif
     outputSigmaMasterTIF_properties=$( propertiesFileCratorTIF_OneBand "${sigmaMasterName_TIF}" "${descriptionSigmaMaster}" "${dateMaster}" "${polarisation}" "${SNAP_VERSION}" "${processingTime}" )
     # report activity in the log
     ciop-log "DEBUG" "Master Backscatter properties file created: ${outputSigmaMasterTIF_properties}"
 
     # create properties file for Intensity average tif product
-    descriptionSigmaSlave="Intesity in dB of the Slave product"
+    descriptionSigmaSlave="Intensity in dB of the Slave product"
     sigmaSlaveName_TIF=${sigmaSlaveName}.tif
     outputSigmaSlaveTIF_properties=$( propertiesFileCratorTIF_OneBand "${sigmaSlaveName_TIF}" "${descriptionSigmaSlave}" "${dateSlave}" "${polarisation}" "${SNAP_VERSION}" "${processingTime}" )
     # report activity in the log
