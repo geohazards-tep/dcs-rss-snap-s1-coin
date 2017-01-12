@@ -1050,17 +1050,17 @@ function main() {
     ## Create quick-look for each tif output product
     # coherence product
     coherenceName_TIF=${coherenceName}.tif
-    pconvert -f png -b 1 -W 4096 -o "${TMPDIR}" "${coherenceName_TIF}" &> /dev/null
+    pconvert -f png -b 1 -W 2048 -o "${TMPDIR}" "${coherenceName_TIF}" &> /dev/null
     # check the exit code
     [ $? -eq 0 ] || return $ERR_PCONVERT
     # sigma average product
     sigmaAverageName_TIF=${sigmaAverageName}.tif
-    pconvert -f png -b 1 -W 4096 -o "${TMPDIR}" "${sigmaAverageName_TIF}" &> /dev/null
+    pconvert -f png -b 1 -W 2048 -o "${TMPDIR}" "${sigmaAverageName_TIF}" &> /dev/null
     # check the exit code
     [ $? -eq 0 ] || return $ERR_PCONVERT
     # sigma difference product
     sigmaDiffName_TIF=${sigmaDiffName}.tif
-    pconvert -f png -b 1 -W 4096 -o "${TMPDIR}" "${sigmaDiffName_TIF}" &> /dev/null
+    pconvert -f png -b 1 -W 2048 -o "${TMPDIR}" "${sigmaDiffName_TIF}" &> /dev/null
     # check the exit code
     [ $? -eq 0 ] || return $ERR_PCONVERT
     ## Create RGB composite R=coherence G=sigmaAverage B=sigmaDiff 
