@@ -480,7 +480,7 @@ function main() {
    [ $? -eq 0 ] || return $ERR_SNAP
 
    # report activity in the log
-   ciop-log "INFO" "Preparing SNAP request file for Coherence computation"
+   ciop-log "INFO" "Preparing SNAP request file for Coherence computation and debursting"
 
    # output products filenames
    outputname_Orb_Back_ESD_DIM=${outputname_Orb_Back_ESD}.dim
@@ -500,7 +500,7 @@ function main() {
    ciop-log "INFO" "Generated request file: ${SNAP_REQUEST}"
  
    # report activity in the log
-   ciop-log "INFO" "Invoking SNAP-gpt for Coherence computation"
+   ciop-log "INFO" "Invoking SNAP-gpt for Coherence computation and debursting"
    
    # invoke the ESA SNAP toolbox
    gpt ${SNAP_REQUEST} &> /dev/null
