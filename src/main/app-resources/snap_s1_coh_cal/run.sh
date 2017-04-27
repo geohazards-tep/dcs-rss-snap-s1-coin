@@ -31,7 +31,9 @@ function cleanExit ()
     esac
 
    [ ${retval} -ne 0 ] && ciop-log "ERROR" "Error ${retval} - ${msg}, processing aborted" || ciop-log "INFO" "${msg}"
-   [ ${retval} -ne 0 ] && hadoop dfs -rmr $(dirname "${inputfile}")
+   if [ $DEBUG -ne 1 ] ; then   
+	[ ${retval} -ne 0 ] && hadoop dfs -rmr $(dirname "${inputfile}")
+   fi
    exit ${retval}
 }
 
@@ -467,7 +469,7 @@ function main() {
    # prepare the SNAP request
    SNAP_REQUEST=$( create_snap_request_orb_cal_back_esd "${masterSplitted}" "${slaveSplitted}" "${orbitType}" "${demType}" "${outputname_Orb_Back_ESD}" )
    [ $? -eq 0 ] || return ${SNAP_REQUEST_ERROR}
-
+   [ $DEBUG -eq 1 ] && cat ${SNAP_REQUEST}
    # report activity in the log
    ciop-log "INFO" "Generated request file: ${SNAP_REQUEST}"
 
@@ -475,7 +477,7 @@ function main() {
    ciop-log "INFO" "Invoking SNAP-gpt for Orbit file application, Calibration, Back-Geocoding and Enhanced Spectral Diversity"
 
    # invoke the ESA SNAP toolbox
-   gpt ${SNAP_REQUEST} &> /dev/null
+   gpt ${SNAP_REQUEST} -c "${CACHE_SIZE}" &> /dev/null
    # check the exit code
    [ $? -eq 0 ] || return $ERR_SNAP
 
@@ -495,7 +497,7 @@ function main() {
    # prepare the SNAP request
    SNAP_REQUEST=$( create_snap_request_coh_deb "${outputname_Orb_Back_ESD_DIM}" "${cohWinAz}" "${cohWinRg}" "${outputnameCoherence}" )
    [ $? -eq 0 ] || return ${SNAP_REQUEST_ERROR}
-
+   [ $DEBUG -eq 1 ] && cat ${SNAP_REQUEST}
    # report activity in the log
    ciop-log "INFO" "Generated request file: ${SNAP_REQUEST}"
  
@@ -503,7 +505,7 @@ function main() {
    ciop-log "INFO" "Invoking SNAP-gpt for Coherence computation and debursting"
    
    # invoke the ESA SNAP toolbox
-   gpt ${SNAP_REQUEST} &> /dev/null
+   gpt ${SNAP_REQUEST} -c "${CACHE_SIZE}" &> /dev/null
    # check the exit code
    [ $? -eq 0 ] || return $ERR_SNAP
 
@@ -522,7 +524,7 @@ function main() {
    # prepare the SNAP request
    SNAP_REQUEST=$( create_snap_request_deb "${outputname_Orb_Back_ESD_DIM}" "${outputnameSigma}" )
    [ $? -eq 0 ] || return ${SNAP_REQUEST_ERROR}
-
+   [ $DEBUG -eq 1 ] && cat ${SNAP_REQUEST}
    # report activity in the log
    ciop-log "INFO" "Generated request file: ${SNAP_REQUEST}"
 
@@ -530,7 +532,7 @@ function main() {
    ciop-log "INFO" "Invoking SNAP-gpt for Backscatter debursting"
 
    # invoke the ESA SNAP toolbox
-   gpt ${SNAP_REQUEST} &> /dev/null
+   gpt ${SNAP_REQUEST} -c "${CACHE_SIZE}" &> /dev/null
    # check the exit code
    [ $? -eq 0 ] || return $ERR_SNAP
 
@@ -547,7 +549,9 @@ function main() {
 
    # cleanup
    rm -rf ${SNAP_REQUEST} "${INPUTDIR}"/* "${OUTPUTDIR}"/*  
-   hadoop dfs -rmr "${splittedCouple}"
+   if [ $DEBUG -ne 1 ] ; then
+   	hadoop dfs -rmr "${splittedCouple}"
+   fi
 
 }
 
@@ -556,6 +560,7 @@ mkdir -p ${TMPDIR}/output
 export OUTPUTDIR=${TMPDIR}/output
 mkdir -p ${TMPDIR}/input
 export INPUTDIR=${TMPDIR}/input
+export DEBUG=0
 
 while read inputfile
 do 
