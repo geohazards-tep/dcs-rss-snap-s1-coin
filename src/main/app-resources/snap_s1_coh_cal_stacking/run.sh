@@ -479,22 +479,22 @@ function create_snap_sigmaAvrgDiff_bandExtract(){
   <node id="BandSelect(2)">
     <operator>BandSelect</operator>
     <sources>
-      <sourceProduct refid="Read"/>
+      <sourceProduct refid="LinearToFromdB"/>
     </sources>
     <parameters class="com.bc.ceres.binding.dom.XppDomElement">
       <selectedPolarisations/>
-      <sourceBands>${sigmaMasterBand}</sourceBands>
+      <sourceBands>${sigmaMasterBand}_db</sourceBands>
       <bandNamePattern/>
     </parameters>
   </node>
   <node id="BandSelect(3)">
     <operator>BandSelect</operator>
     <sources>
-      <sourceProduct refid="Read"/>
+      <sourceProduct refid="LinearToFromdB"/>
     </sources>
     <parameters class="com.bc.ceres.binding.dom.XppDomElement">
       <selectedPolarisations/>
-      <sourceBands>${sigmaSlaveBand}</sourceBands>
+      <sourceBands>${sigmaSlaveBand}_db</sourceBands>
       <bandNamePattern/>
     </parameters>
   </node>
