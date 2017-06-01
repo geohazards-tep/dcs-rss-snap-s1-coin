@@ -2,16 +2,16 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <groupId>com.terradue</groupId>
-  <artifactId>rss-snap-s1-coin</artifactId>
+  <artifactId>dcs-rss-snap-s1-coin</artifactId>
   <packaging>pom</packaging>
-  <name>rss-snap-s1-coin</name>
+  <name>dcs-rss-snap-s1-coin</name>
   <parent>
     <groupId>com.terradue</groupId>
     <artifactId>dcs-bash-parent</artifactId>
     <version>2.0.0</version>
   </parent>
   <description>SNAP COherence and INtensity (COIN) chain for GEP</description>
-  <version>1.0-SNAPSHOT</version>
+  <version>1.1.1</version>
   <properties>
     <summary>SNAP COherence and INtensity (COIN) chain for GEP</summary>
     <description>SNAP COherence and INtensity (COIN) chain for GEP</description>
@@ -19,19 +19,19 @@
     <yumRepo>geohazards-tep</yumRepo>
   </properties>
   <scm>
-    <connection>scm:git:ssh://git@github.com/geohazards-tep/rss-snap-s1-coin</connection>
-    <developerConnection>scm:git:ssh://git@github.com/geohazards-tep/rss-snap-s1-coin</developerConnection>
-    <url>https://github.com/geohazards-tep/rss-snap-s1-coin</url>
+    <connection>scm:git:ssh://git@github.com/geohazards-tep/dcs-rss-snap-s1-coin</connection>
+    <developerConnection>scm:git:ssh://git@github.com/geohazards-tep/dcs-rss-snap-s1-coin</developerConnection>
+    <url>https://github.com/geohazards-tep/dcs-rss-snap-s1-coin</url>
     <tag>HEAD</tag>
   </scm>
   <profiles>
     <profile>
       <id>package-app</id>
       <activation>
-         <property>
-           <name>env</name>
-           <value>ci</value>
-         </property>
+        <property>
+          <name>env</name>
+          <value>ci</value>
+        </property>
       </activation>
       <build>
         <plugins>

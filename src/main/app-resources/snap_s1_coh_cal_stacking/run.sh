@@ -41,7 +41,9 @@ function cleanExit ()
     esac
 
    [ ${retval} -ne 0 ] && ciop-log "ERROR" "Error ${retval} - ${msg}, processing aborted" || ciop-log "INFO" "${msg}"
-   [ ${retval} -ne 0 ] && hadoop dfs -rmr $(dirname "${inputfiles[0]}")
+   if [ $DEBUG -ne 1 ] ; then
+   	[ ${retval} -ne 0 ] && hadoop dfs -rmr $(dirname "${inputfiles[0]}")
+   fi
    exit ${retval}
 }
 
@@ -477,22 +479,22 @@ function create_snap_sigmaAvrgDiff_bandExtract(){
   <node id="BandSelect(2)">
     <operator>BandSelect</operator>
     <sources>
-      <sourceProduct refid="Read"/>
+      <sourceProduct refid="LinearToFromdB"/>
     </sources>
     <parameters class="com.bc.ceres.binding.dom.XppDomElement">
       <selectedPolarisations/>
-      <sourceBands>${sigmaMasterBand}</sourceBands>
+      <sourceBands>${sigmaMasterBand}_db</sourceBands>
       <bandNamePattern/>
     </parameters>
   </node>
   <node id="BandSelect(3)">
     <operator>BandSelect</operator>
     <sources>
-      <sourceProduct refid="Read"/>
+      <sourceProduct refid="LinearToFromdB"/>
     </sources>
     <parameters class="com.bc.ceres.binding.dom.XppDomElement">
       <selectedPolarisations/>
-      <sourceBands>${sigmaSlaveBand}</sourceBands>
+      <sourceBands>${sigmaSlaveBand}_db</sourceBands>
       <bandNamePattern/>
     </parameters>
   </node>
@@ -923,7 +925,7 @@ function main() {
     # prepare the SNAP request
     SNAP_REQUEST=$( create_snap_request_mrg_ml_tc "${inputCohDIM[@]}" "${polarisation}" "${nAzLooks}" "${nRgLooks}" "${demType}" "${pixelSpacingInMeter}" "${mapProjection}" "${coherence_Mrg_Ml_Tc}" )
     [ $? -eq 0 ] || return ${SNAP_REQUEST_ERROR}
-
+    [ $DEBUG -eq 1 ] && cat ${SNAP_REQUEST}
     # report activity in the log
     ciop-log "INFO" "Generated request file: ${SNAP_REQUEST}"
         
@@ -931,7 +933,7 @@ function main() {
     ciop-log "INFO" "Invoking SNAP-gpt on the generated request file for merging, multilooking and terrain correction processing (Coherence product)"
 
     # invoke the ESA SNAP toolbox
-    gpt $SNAP_REQUEST &> /dev/null
+    gpt $SNAP_REQUEST -c "${CACHE_SIZE}" &> /dev/null
     # check the exit code
     [ $? -eq 0 ] || return $ERR_SNAP
 
@@ -945,7 +947,7 @@ function main() {
     # prepare the SNAP request
     SNAP_REQUEST=$( create_snap_request_mrg_ml_tc "${inputSigmaDIM[@]}" "${polarisation}" "${nAzLooks}" "${nRgLooks}" "${demType}" "${pixelSpacingInMeter}" "${mapProjection}" "${sigma_Mrg_Ml_Tc}" )
     [ $? -eq 0 ] || return ${SNAP_REQUEST_ERROR}
-
+    [ $DEBUG -eq 1 ] && cat ${SNAP_REQUEST}
     # report activity in the log
     ciop-log "INFO" "Generated request file: ${SNAP_REQUEST}"
     
@@ -953,13 +955,12 @@ function main() {
     ciop-log "INFO" "Invoking SNAP-gpt on the generated request file for merging, multilooking and terrain correction processing (Backscatter product)"
 
     # invoke the ESA SNAP toolbox
-    gpt $SNAP_REQUEST &> /dev/null
+    gpt $SNAP_REQUEST -c "${CACHE_SIZE}" &> /dev/null
     # check the exit code
     [ $? -eq 0 ] || return $ERR_SNAP
 	
     # cleanup input products for the merging, multilooking and terrain correction processing 
     rm -rf "${INPUTDIR}"/*
-	
 	
     ### PRODUCTS STACKING
     # input products filename
@@ -974,7 +975,7 @@ function main() {
     # prepare the SNAP request
     SNAP_REQUEST=$( create_snap_request_stack "${sigma_Mrg_Ml_Tc_DIM}" "${coherence_Mrg_Ml_Tc_DIM}" "${stackProduct}" )
     [ $? -eq 0 ] || return ${SNAP_REQUEST_ERROR}
-    
+    [ $DEBUG -eq 1 ] && cat ${SNAP_REQUEST}
     # report activity in the log
     ciop-log "INFO" "Generated request file: ${SNAP_REQUEST}"
     
@@ -982,10 +983,10 @@ function main() {
     ciop-log "INFO" "Invoking SNAP-gpt on the generated request file to create stack with Master Backscatter, Slave Backscatter and Coherence products"
 
     # invoke the ESA SNAP toolbox
-    gpt $SNAP_REQUEST &> /dev/null
+    gpt $SNAP_REQUEST -c "${CACHE_SIZE}" &> /dev/null
     # check the exit code
     [ $? -eq 0 ] || return $ERR_SNAP
-
+    [ $DEBUG -eq 1 ] && cat ${SNAP_REQUEST}
     ### AUX: get master/slave backscatter and coherence source bands from the stack product
     # The source band names are useful for the following processing
     local sigmaMasterBand
@@ -1030,7 +1031,7 @@ function main() {
     # prepare the SNAP request
     SNAP_REQUEST=$( create_snap_sigmaAvrgDiff_bandExtract "${stackProduct_DIM}" "${sigmaMasterBand}" "${sigmaSlaveBand}" "${coherenceBand}" "${sigmaDiffName}" "${sigmaAverageName}" "${sigmaMasterName}" "${sigmaSlaveName}" "${coherenceName}")
     [ $? -eq 0 ] || return ${SNAP_REQUEST_ERROR}
-
+    [ $DEBUG -eq 1 ] && cat ${SNAP_REQUEST}
     # report activity in the log
     ciop-log "INFO" "Generated request file: ${SNAP_REQUEST}"
     
@@ -1038,7 +1039,7 @@ function main() {
     ciop-log "INFO" "Invoking SNAP-gpt on the generated request file to Backscatter average and difference computation (in dB) and individual bands extraction from stack product"
 
     # invoke the ESA SNAP toolbox
-    gpt $SNAP_REQUEST &> /dev/null
+    gpt $SNAP_REQUEST -c "${CACHE_SIZE}" &> /dev/null
     # check the exit code
     [ $? -eq 0 ] || return $ERR_SNAP
 
@@ -1048,35 +1049,65 @@ function main() {
     ciop-log "INFO" "Creating composite RGB quick-look from coherence product (=Red), backscatter average (=Green) and backscatter difference (=Blue)"
 
     ## Create quick-look for each tif output product
+    # sigma master product
+    sigmaMasterName_TIF=${sigmaMasterName}.tif
+    pconvert -f png -b 1 -W 2048 -o "${OUTPUTDIR}" "${sigmaMasterName_TIF}" &> /dev/null
+    # check the exit code
+    [ $? -eq 0 ] || return $ERR_PCONVERT
+    # sigma slave product
+    sigmaSlaveName_TIF=${sigmaSlaveName}.tif
+    pconvert -f png -b 1 -W 2048 -o "${OUTPUTDIR}" "${sigmaSlaveName_TIF}" &> /dev/null
+    # check the exit code
+    [ $? -eq 0 ] || return $ERR_PCONVERT
     # coherence product
     coherenceName_TIF=${coherenceName}.tif
-    pconvert -f png -b 1 -W 2048 -o "${TMPDIR}" "${coherenceName_TIF}" &> /dev/null
+    pconvert -f png -b 1 -W 2048 -o "${OUTPUTDIR}" "${coherenceName_TIF}" &> /dev/null
     # check the exit code
     [ $? -eq 0 ] || return $ERR_PCONVERT
     # sigma average product
     sigmaAverageName_TIF=${sigmaAverageName}.tif
-    pconvert -f png -b 1 -W 2048 -o "${TMPDIR}" "${sigmaAverageName_TIF}" &> /dev/null
+    pconvert -f png -b 1 -W 2048 -o "${OUTPUTDIR}" "${sigmaAverageName_TIF}" &> /dev/null
     # check the exit code
     [ $? -eq 0 ] || return $ERR_PCONVERT
     # sigma difference product
     sigmaDiffName_TIF=${sigmaDiffName}.tif
-    pconvert -f png -b 1 -W 2048 -o "${TMPDIR}" "${sigmaDiffName_TIF}" &> /dev/null
+    pconvert -f png -b 1 -W 2048 -o "${OUTPUTDIR}" "${sigmaDiffName_TIF}" &> /dev/null
     # check the exit code
     [ $? -eq 0 ] || return $ERR_PCONVERT
     ## Create RGB composite R=coherence G=sigmaAverage B=sigmaDiff 
     combinedRGB=combined_coh_sigmaAvrg_sigmaDiff_IW_${polarisation}_${dateMaster}_${dateSlave}
-    convert -combine ${TMPDIR}/${coeherenceBasename}.png ${TMPDIR}/${sigmaAverageBasename}.png ${TMPDIR}/${sigmaDiffBasename}.png ${TMPDIR}/RGB.png 
+    convert -combine ${OUTPUTDIR}/${coeherenceBasename}.png ${OUTPUTDIR}/${sigmaAverageBasename}.png ${OUTPUTDIR}/${sigmaDiffBasename}.png ${TMPDIR}/RGB.png 
     # remove black background 
     convert ${TMPDIR}/RGB.png -alpha set -channel RGBA -fill none -opaque black ${OUTPUTDIR}/${combinedRGB}.png 
 
     # report activity in the log
     ciop-log "INFO" "Creating properties files"
 
-    #create .properties file for displacement png quick-look
+    #create .properties file for composite RGB png quick-look
     outCombinedRGB_properties=$( propertiesFileCratorPNG "${coherenceName_TIF}" "${OUTPUTDIR}/${combinedRGB}.png" )
-
     # report activity in the log
     ciop-log "DEBUG" "Composite RGB properties file created: ${outCombinedRGB_properties}"
+    #create .properties file for sigma master png quick-look
+    outSigmaMaster_properties=$( propertiesFileCratorPNG "${sigmaMasterName_TIF}" "${sigmaMasterName}.png" )
+    # report activity in the log
+    ciop-log "DEBUG" "Sigma Master properties file created: ${outSigmaMaster_properties}"
+    #create .properties file for sigma slave png quick-look
+    outSigmaSlave_properties=$( propertiesFileCratorPNG "${sigmaSlaveName_TIF}" "${sigmaSlaveName}.png" )
+    # report activity in the log
+    ciop-log "DEBUG" "Sigma Slave properties file created: ${outSigmaSlave_properties}"
+    #create .properties file for coherence png quick-look
+    outCoh_properties=$( propertiesFileCratorPNG "${coherenceName_TIF}" "${coherenceName}.png" )
+    # report activity in the log
+    ciop-log "DEBUG" "Coherence properties file created: ${outCoh_properties}"
+    #create .properties file for sigma average png quick-look
+    outSigmaAverage_properties=$( propertiesFileCratorPNG "${sigmaAverageName_TIF}" "${sigmaAverageName}.png" )
+    # report activity in the log
+    ciop-log "DEBUG" "Sigma average properties file created: ${outSigmaAverage_properties}"
+    #create .properties file for sigma difference png quick-look
+    outSigmaDiff_properties=$( propertiesFileCratorPNG "${sigmaDiffName_TIF}" "${sigmaDiffName}.png" )
+    # report activity in the log
+    ciop-log "DEBUG" "Sigma difference properties file created: ${outSigmaDiff_properties}"
+
     # get timing info for the tif properties file
     dateStart_s=$(date -d "${dateMaster}" +%s)
     dateStop_s=$(date -d "${dateSlave}" +%s)
@@ -1105,14 +1136,12 @@ function main() {
 
     # create properties file for Intensity average tif product
     descriptionSigmaMaster="Intensity in dB of the Master product"
-    sigmaMasterName_TIF=${sigmaMasterName}.tif
     outputSigmaMasterTIF_properties=$( propertiesFileCratorTIF_OneBand "${sigmaMasterName_TIF}" "${descriptionSigmaMaster}" "${dateMaster}" "${polarisation}" "${SNAP_VERSION}" "${processingTime}" )
     # report activity in the log
     ciop-log "DEBUG" "Master Backscatter properties file created: ${outputSigmaMasterTIF_properties}"
 
     # create properties file for Intensity average tif product
     descriptionSigmaSlave="Intensity in dB of the Slave product"
-    sigmaSlaveName_TIF=${sigmaSlaveName}.tif
     outputSigmaSlaveTIF_properties=$( propertiesFileCratorTIF_OneBand "${sigmaSlaveName_TIF}" "${descriptionSigmaSlave}" "${dateSlave}" "${polarisation}" "${SNAP_VERSION}" "${processingTime}" )
     # report activity in the log
     ciop-log "DEBUG" "Slave Backscatter properties file created: ${outputSigmaSlaveTIF_properties}"
@@ -1123,10 +1152,12 @@ function main() {
     # cleanup temp dir and output dir 
     rm -rf  "${TMPDIR}"/* "${OUTPUTDIR}"/* 
     # cleanup output products generated by the previous task
-    for index in `seq 0 $inputfilesNum`;
-    do
-    	hadoop dfs -rmr "${inputfiles[$index]}"     	
-    done
+    if [ $DEBUG -ne 1 ] ; then
+    	for index in `seq 0 $inputfilesNum`;
+    	do
+    		hadoop dfs -rmr "${inputfiles[$index]}"     	
+    	done
+    fi 
 
     return ${SUCCESS}
 }
@@ -1136,6 +1167,7 @@ mkdir -p ${TMPDIR}/output
 export OUTPUTDIR=${TMPDIR}/output
 mkdir -p ${TMPDIR}/input
 export INPUTDIR=${TMPDIR}/input
+export DEBUG=0
 
 declare -a inputfiles
 
