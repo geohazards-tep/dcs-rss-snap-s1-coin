@@ -61,9 +61,9 @@
     <jobTemplate id="snap_s1_coh_cal_stacking">
       <streamingExecutable>/application/snap_s1_coh_cal_stacking/run.sh</streamingExecutable>
       <defaultParameters>
-         <parameter id="nAzLooks" title="Azimuth Multilook factor" abstract="Define the multilook factor applied for Azimuth direction in the Multilooking processing [integer]" scope="runtime" maxOccurs="1">1</parameter>
-         <parameter id="nRgLooks" title="Range Multilook factor" abstract="Define the multilook factor applied for Range direction in the Multilooking processing [integer]" scope="runtime" maxOccurs="1">4</parameter>
-         <parameter id="pixelSpacingInMeter" title="Pixel spacing in meters" abstract="Define the pixel spacing for the Terrain-Correction processing [meters]" scope="runtime" maxOccurs="1">15.0</parameter>
+         <parameter id="nAzLooks" title="Azimuth Multilook factor" abstract="Define the multilook factor applied for Azimuth direction in the Multilooking processing [integer]" scope="runtime" maxOccurs="1">2</parameter>
+         <parameter id="nRgLooks" title="Range Multilook factor" abstract="Define the multilook factor applied for Range direction in the Multilooking processing [integer]" scope="runtime" maxOccurs="1">8</parameter>
+         <parameter id="pixelSpacingInMeter" title="Pixel spacing in meters" abstract="Define the pixel spacing for the Terrain-Correction processing [meters]" scope="runtime" maxOccurs="1">30.0</parameter>
          <parameter id="demtype" title="DEM type" abstract="Define the DEM source for the Back-Geocoding Coregistration and Terrain Correction processing. NOTE: SRTM valid in the [-56 deg,+60 deg] range of latitudes." scope="test" maxOccurs="1">
                 <options>
                         <option>SRTM 3Sec</option>
@@ -88,7 +88,7 @@
       </defaultJobconf>
     </jobTemplate>
   </jobTemplates>
-  <workflow id="snap-s1-coh-sigma" title="SNAP Sentinel-1 COherence and INtensity (COIN)" abstract="This service provides the coherence and intensity changes for Sentinel-1 TOPSAR IW data pairs performed through SNAP. SNAP is a common architecture for all Sentinel Toolboxes, which is ideal for Earth Observation processing and analysis. 
+  <workflow id="snap-s1-coh-sigma" title="SNAP Sentinel-1 COherence and INtensity (COIN)" abstract="This service provides the interferometric coherence, intensity and its change for a Sentinel-1 TOPSAR IW data pair performed through SNAP. SNAP is a common architecture for all Sentinel Toolboxes, which is ideal for Earth Observation processing and analysis. 
 WARNING: the TIFF output products will be automatically deleted after 2 weeks; this does not apply to results published on Zenodo.">
     <workflowVersion>1.0</workflowVersion>
     <node id="node_snap_s1_input_splitting">
