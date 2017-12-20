@@ -466,7 +466,6 @@ function main() {
     # retrieve the MASTER product to the local temporary folder TMPDIR provided by the framework (this folder is only used by this process)
     # the utility returns the local path so the variable $retrievedMaster contains the local path to the MASTER product
     retrievedMaster=$( get_data "${master}" "${TMPDIR}" ) 
-     
     #masterTmp=/tmp/snap/S1A_IW_SLC__1SDV_20151103T101314_20151103T101341_008439_00BED5_B751.SAFE.zip
     #retrievedMaster=$( ciop-copy -U -o $TMPDIR "$masterTmp" )
 
@@ -476,6 +475,7 @@ function main() {
          cat ${TMPDIR}/ciop_copy.stderr
          return $ERR_NORETRIEVEDMASTER
     fi
+    [ $DEBUG -eq 1 ] && cat ${TMPDIR}/ciop_copy.stderr
     mastername=$( basename "$retrievedMaster" )
 
     # report activity in the log
@@ -487,7 +487,6 @@ function main() {
     # retrieve the SLAVE product to the local temporary folder TMPDIR provided by the framework (this folder is only used by this process)
     # the utility returns the local path so the variable $retrievedSlave contains the local path to the SLAVE product
     retrievedSlave=$( get_data "${slave}" "${TMPDIR}" )
-
     #slaveTmp=/tmp/snap/S1A_IW_SLC__1SDV_20151127T101308_20151127T101335_008789_00C888_2D21.SAFE.zip
     #retrievedSlave=$( ciop-copy -U -o $TMPDIR "$slaveTmp" )
 
@@ -497,7 +496,7 @@ function main() {
           cat ${TMPDIR}/ciop_copy.stderr
           return $ERR_NORETRIEVEDSLAVE
     fi
-
+    [ $DEBUG -eq 1 ] && cat ${TMPDIR}/ciop_copy.stderr
     slavename=$( basename "$retrievedSlave" )
 
     # report activity in the log
@@ -528,7 +527,7 @@ function main() {
     	# prepare the SNAP request
     	SNAP_REQUEST=$( create_snap_request_split "${retrievedMaster}" "${retrievedSlave}" "${currentSubswath}" "${polarisation}" "${outMasterSplitted}" "${outSlaveSplitted}" )
     	[ $? -eq 0 ] || return ${SNAP_REQUEST_ERROR}
-
+	[ $DEBUG -eq 1 ] && cat ${SNAP_REQUEST}
     	# report activity in the log
     	ciop-log "INFO" "Generated request file: ${SNAP_REQUEST}"
 
@@ -536,14 +535,18 @@ function main() {
     	ciop-log "INFO" "Invoking SNAP-gpt on request file for Master and Slave ${currentSubswath} splitting"
 
     	# invoke the ESA SNAP toolbox
-    	gpt $SNAP_REQUEST -c "${CACHE_SIZE}" &> /dev/null
-
+    	#gpt $SNAP_REQUEST -c "${CACHE_SIZE}" &> /dev/null
+	gpt $SNAP_REQUEST -c 2048M &> /dev/null
     	# check the exit code
     	[ $? -eq 0 ] || return $ERR_SNAP            
         
         # compress splitting results for the current subswath
         cd ${OUTPUTDIR}
-        zip -r ${outSplittedCoupleBasename}.zip ${outMasterSplittedBasename}.data ${outMasterSplittedBasename}.dim ${outSlaveSplittedBasename}.data ${outSlaveSplittedBasename}.dim &> /dev/null       
+        if [ $DEBUG -eq 1 ] ; then
+            zip -r ${outSplittedCoupleBasename}.zip ${outMasterSplittedBasename}.data ${outMasterSplittedBasename}.dim ${outSlaveSplittedBasename}.data ${outSlaveSplittedBasename}.dim
+        else
+            zip -r ${outSplittedCoupleBasename}.zip ${outMasterSplittedBasename}.data ${outMasterSplittedBasename}.dim ${outSlaveSplittedBasename}.data ${outSlaveSplittedBasename}.dim &> /dev/null
+        fi       
         cd - &> /dev/null
 
   	# publish the ESA SNAP results
@@ -564,6 +567,7 @@ function main() {
 # create the output folder to store the output products and export it
 mkdir -p ${TMPDIR}/output
 export OUTPUTDIR=${TMPDIR}/output
+export DEBUG=0
 
 declare -a inputfiles
 
