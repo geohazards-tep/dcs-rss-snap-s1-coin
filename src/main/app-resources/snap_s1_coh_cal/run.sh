@@ -31,9 +31,10 @@ function cleanExit ()
     esac
 
    [ ${retval} -ne 0 ] && ciop-log "ERROR" "Error ${retval} - ${msg}, processing aborted" || ciop-log "INFO" "${msg}"
-   if [ $DEBUG -ne 1 ] ; then   
-	[ ${retval} -ne 0 ] && hadoop dfs -rmr $(dirname "${inputfile}")
-   fi
+   # Not allowed in the multi-tenant cluster
+   #if [ $DEBUG -ne 1 ] ; then   
+   #	[ ${retval} -ne 0 ] && hadoop dfs -rmr $(dirname "${inputfile}")
+   #fi
    exit ${retval}
 }
 
@@ -549,9 +550,10 @@ function main() {
 
    # cleanup
    rm -rf ${SNAP_REQUEST} "${INPUTDIR}"/* "${OUTPUTDIR}"/*  
-   if [ $DEBUG -ne 1 ] ; then
-   	hadoop dfs -rmr "${splittedCouple}"
-   fi
+   # Not allowed in hte multi-tenant cluster
+   #if [ $DEBUG -ne 1 ] ; then
+   #	hadoop dfs -rmr "${splittedCouple}"
+   #fi
 
 }
 
