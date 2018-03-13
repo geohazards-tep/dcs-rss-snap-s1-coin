@@ -88,8 +88,7 @@
       </defaultJobconf>
     </jobTemplate>
   </jobTemplates>
-  <workflow id="snap-s1-coh-sigma" title="SNAP Sentinel-1 COherence and INtensity (COIN)" abstract="This service provides the interferometric coherence, intensity and its change for a Sentinel-1 TOPSAR IW data pair performed through SNAP. SNAP is a common architecture for all Sentinel Toolboxes, which is ideal for Earth Observation processing and analysis. 
-WARNING: the TIFF output products will be automatically deleted after 2 weeks; this does not apply to results published on Zenodo.">
+  <workflow id="snap-s1-coh-sigma" title="COIN – Coherence and Intensity change for Sentinel-1" abstract="This service provides geocoded composites of coherence and amplitude images from a pair of Sentinel-1 TOPSAR IW data pairs. SNAP is a common architecture for all Sentinel Toolboxes, which is ideal for Earth Observation processing and analysis.">
     <workflowVersion>1.0</workflowVersion>
     <node id="node_snap_s1_input_splitting">
       <job id="snap_s1_input_splitting" />
