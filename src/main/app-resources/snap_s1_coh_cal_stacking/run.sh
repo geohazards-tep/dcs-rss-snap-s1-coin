@@ -854,15 +854,16 @@ function propertiesFileCratorTIF_IFG(){
     properties_filename=${outputProductTif}.properties
 
     cat << EOF > ${properties_filename}
-title=${outputProductTIF_basename}
-description=${description}
-dateMaster=${dateStart}
-dateSlave=${dateStop}
-dateDiff_days=${dateDiff_days}
-polarisation=${polarisation}
-pixelSpacing=${pixelSpacing}
-snapVersion=${snapVersion}
-processingTime=${processingTime}
+Title=${outputProductTIF_basename}
+Service\ Name=COIN
+Description=${description}
+Master\ Date=${dateStart}
+Slave\ Date=${dateStop}
+Time\ Separation\ \(days\)=${dateDiff_days}
+Polarisation=${polarisation}
+Pixel\ Spacing=${pixelSpacing}
+Snap\ Version=${snapVersion}
+Processing\ Time=${processingTime}
 EOF
 
     [ $? -eq 0 ] && {
@@ -895,13 +896,14 @@ function propertiesFileCratorTIF_OneBand(){
     properties_filename=${outputProductTif}.properties
 
     cat << EOF > ${properties_filename}
-title=${outputProductTIF_basename}
-description=${description}
-productDate=${date}
-polarisation=${polarisation}
-pixelSpacing=${pixelSpacing}
-snapVersion=${snapVersion}
-processingTime=${processingTime}
+Title=${outputProductTIF_basename}
+Service\ Name=COIN
+Description=${description}
+Product\ Date=${date}
+Polarisation=${polarisation}
+Pixel\ Spacing=${pixelSpacing}
+Snap\ Version=${snapVersion}
+Processing\ Time=${processingTime}
 EOF
 
     [ $? -eq 0 ] && {
@@ -913,18 +915,19 @@ EOF
 
 
 function create_snap_request_statsComputation(){
-# function call: create_snap_request_statsComputation $tiffProduct $sourceBandName $outputStatsFile
+# function call: create_snap_request_statsComputation $tiffProduct $sourceBandName $outputStatsFile $pc_csv_list
     # get number of inputs
     inputNum=$#
     # check on number of inputs
-    if [ "$inputNum" -ne "3" ] ; then
+    if [ "$inputNum" -lt "3" ] || [ "$inputNum" -gt "4" ]; then
         return ${SNAP_REQUEST_ERROR}
     fi
-     
+
     local tiffProduct=$1
     local sourceBandName=$2
     local outputStatsFile=$3
-
+    local pc_csv_list=""
+    [ "$inputNum" -eq "3" ] && pc_csv_list="90,95" || pc_csv_list=$4
     #sets the output filename
     snap_request_filename="${TMPDIR}/$( uuidgen ).xml"
 
@@ -950,8 +953,8 @@ function create_snap_request_statsComputation(){
       </bandConfigurations>
       <outputShapefile></outputShapefile>
       <outputAsciiFile>${outputStatsFile}</outputAsciiFile>
-      <percentiles>90,95</percentiles>
-      <accuracy>3</accuracy>
+      <percentiles>${pc_csv_list}</percentiles>
+      <accuracy>4</accuracy>
     </parameters>
   </node>
 </graph>
@@ -965,48 +968,443 @@ EOF
 }
 
 
+# function that put value labels (assumed to be 5 vlaues between min and max included) 
+# to the colorbar legend input depending on the provided min and max values
 function colorbarCreator(){
-# function call: colorbarCreator $inputColorbar $colorbarDescription $statsFile $outputColorbar
+# function call: colorbarCreator $inputColorbar $colorbarDescription $minimum $maximum $outputColorbar
 
-    #function that put value labels to the JET colorbar legend input depending on the
-    # provided product statistics   
-
-     # get number of inputs
-    inputNum=$#
-    # check on number of inputs
-    if [ "$inputNum" -ne "4" ] ; then
-        return ${ERR_COLORBAR_CREATOR}
-    fi
+# get number of inputs
+inputNum=$#
+# check on number of inputs
+if [ "$inputNum" -ne "5" ] ; then
+    return ${ERR_COLORBAR_CREATOR}
+fi
     
-    #get input
-    local inputColorbar=$1
-    local colorbarDescription=$2
-    local statsFile=$3
-    local outputColorbar=$4
+#get input
+local inputColorbar=$1
+local colorbarDescription=$2
+local minimum=$3
+local maximum=$4
+local outputColorbar=$5
 
-    # get maximum from stats file
-    maximum=$(cat "${statsFile}" | grep world | tr '\t' ' ' | tr -s ' ' | cut -d ' ' -f 5)
-    #get minimum from stats file
-    minimum=$(cat "${statsFile}" | grep world | tr '\t' ' ' | tr -s ' ' | cut -d ' ' -f 7)
-    #compute colorbar values
-    rangeWidth=$(echo "scale=5; $maximum-($minimum)" | bc )
-    red=$(echo "scale=5; $minimum" | bc | awk '{printf "%.2f", $0}')
-    yellow=$(echo "scale=5; $minimum+$rangeWidth/4" | bc | awk '{printf "%.2f", $0}')
-    green=$(echo "scale=5; $minimum+$rangeWidth/2" | bc | awk '{printf "%.2f", $0}')
-    cyan=$(echo "scale=5; $minimum+$rangeWidth*3/4" | bc | awk '{printf "%.2f", $0}')    
-    blue=$(echo "scale=5; $maximum" | bc | awk '{printf "%.2f", $0}')
+#compute colorbar values
+rangeWidth=$(echo "scale=5; $maximum-($minimum)" | bc )
+val_1=$(echo "scale=5; $minimum" | bc | awk '{printf "%.2f", $0}')
+val_2=$(echo "scale=5; $minimum+$rangeWidth/4" | bc | awk '{printf "%.2f", $0}')
+val_3=$(echo "scale=5; $minimum+$rangeWidth/2" | bc | awk '{printf "%.2f", $0}')
+val_4=$(echo "scale=5; $minimum+$rangeWidth*3/4" | bc | awk '{printf "%.2f", $0}')    
+val_5=$(echo "scale=5; $maximum" | bc | awk '{printf "%.2f", $0}')
     
-    # add clolrbar description
-    convert -pointsize 15 -font "${_CIOP_APPLICATION_PATH}/gpt/LucidaTypewriterBold.ttf" -fill black -draw "text 9,22 \"$colorbarDescription\" " $inputColorbar $outputColorbar
-    # add color values
-    convert -pointsize 13 -font "${_CIOP_APPLICATION_PATH}/gpt/LucidaTypewriterBold.ttf" -fill black -draw "text 7,100 \"$red\" " $outputColorbar $outputColorbar
-    convert -pointsize 13 -font "${_CIOP_APPLICATION_PATH}/gpt/LucidaTypewriterBold.ttf" -fill black -draw "text 76,100 \"$yellow\" " $outputColorbar $outputColorbar
-    convert -pointsize 13 -font "${_CIOP_APPLICATION_PATH}/gpt/LucidaTypewriterBold.ttf" -fill black -draw "text 147,100 \"$green\" " $outputColorbar $outputColorbar 
-    convert -pointsize 13 -font "${_CIOP_APPLICATION_PATH}/gpt/LucidaTypewriterBold.ttf" -fill black -draw "text 212,100 \"$cyan\" " $outputColorbar $outputColorbar
-    convert -pointsize 13 -font "${_CIOP_APPLICATION_PATH}/gpt/LucidaTypewriterBold.ttf" -fill black -draw "text 278,100 \"$blue\" " $outputColorbar $outputColorbar
+# add clolrbar description
+convert -pointsize 15 -font "${_CIOP_APPLICATION_PATH}/gpt/LucidaTypewriterBold.ttf" -fill black -draw "text 9,22 \"$colorbarDescription\" " $inputColorbar $outputColorbar
+# add color values
+convert -pointsize 13 -font "${_CIOP_APPLICATION_PATH}/gpt/LucidaTypewriterBold.ttf" -fill black -draw "text 7,100 \"$val_1\" " $outputColorbar $outputColorbar
+convert -pointsize 13 -font "${_CIOP_APPLICATION_PATH}/gpt/LucidaTypewriterBold.ttf" -fill black -draw "text 76,100 \"$val_2\" " $outputColorbar $outputColorbar
+convert -pointsize 13 -font "${_CIOP_APPLICATION_PATH}/gpt/LucidaTypewriterBold.ttf" -fill black -draw "text 147,100 \"$val_3\" " $outputColorbar $outputColorbar 
+convert -pointsize 13 -font "${_CIOP_APPLICATION_PATH}/gpt/LucidaTypewriterBold.ttf" -fill black -draw "text 212,100 \"$val_4\" " $outputColorbar $outputColorbar
+convert -pointsize 13 -font "${_CIOP_APPLICATION_PATH}/gpt/LucidaTypewriterBold.ttf" -fill black -draw "text 278,100 \"$val_5\" " $outputColorbar $outputColorbar
 
+return 0
+
+}
+
+
+# function that put value labels (assumed to be 2 values for each axis) for the RGB colortable
+# to the colorbar legend input depending on the provided min and max values
+function colorbarCreatorRGB(){
+# function call colorbarCreatorRGB "${colorbarInput}" "${colorbarDescription}" "${minRED}" "${maxRED}" "${minGREEN}" "${maxGREEN}" "${minBLUE}" "${maxBLUE}" "${rgbCompositeColorbarOutput}" 
+# get number of inputs
+inputNum=$#
+# check on number of inputs
+if [ "$inputNum" -ne "9" ] ; then
+    return ${ERR_COLORBAR_CREATOR}
+fi
+
+#get input
+local inputColorbar=$1
+local colorbarDescription=$2
+local minRED=$3
+local maxRED=$4
+local minGREEN=$5
+local maxGREEN=$6
+local minBLUE=$7
+local maxBLUE=$8
+local outputColorbar=$9
+
+# cut values to the second decimal digit
+minRED=$(echo "scale=5; $minRED" | bc | awk '{printf "%.1f", $0}')
+maxRED=$(echo "scale=5; $maxRED" | bc | awk '{printf "%.1f", $0}')
+minGREEN=$(echo "scale=5; $minGREEN" | bc | awk '{printf "%.1f", $0}')
+maxGREEN=$(echo "scale=5; $maxGREEN" | bc | awk '{printf "%.1f", $0}')
+minBLUE=$(echo "scale=5; $minBLUE" | bc | awk '{printf "%.1f", $0}')
+maxBLUE=$(echo "scale=5; $maxBLUE" | bc | awk '{printf "%.1f", $0}')
+
+# add colorbar description
+convert -pointsize 13 -font "${_CIOP_APPLICATION_PATH}/gpt/LucidaTypewriterBold.ttf" -fill black -draw "text 25,395 \"$colorbarDescription\" " $inputColorbar $outputColorbar
+# add color values
+# min red
+convert -pointsize 11 -font "${_CIOP_APPLICATION_PATH}/gpt/LucidaTypewriterBold.ttf" -fill black -draw "text 115,215 \"$minRED\" " $outputColorbar $outputColorbar
+# max red
+convert -pointsize 11 -font "${_CIOP_APPLICATION_PATH}/gpt/LucidaTypewriterBold.ttf" -fill black -draw "text 30,310 \"$maxRED\" " $outputColorbar $outputColorbar
+# min green
+convert -pointsize 11 -font "${_CIOP_APPLICATION_PATH}/gpt/LucidaTypewriterBold.ttf" -fill black -draw "text 155,235 \"$minGREEN\" " $outputColorbar $outputColorbar
+# max green
+convert -pointsize 11 -font "${_CIOP_APPLICATION_PATH}/gpt/LucidaTypewriterBold.ttf" -fill black -draw "text 270,265 \"$maxGREEN\" " $outputColorbar $outputColorbar
+# min blue
+convert -pointsize 11 -font "${_CIOP_APPLICATION_PATH}/gpt/LucidaTypewriterBold.ttf" -fill black -draw "text 165,190 \"$minBLUE\" " $outputColorbar $outputColorbar
+# max blue
+convert -pointsize 11 -font "${_CIOP_APPLICATION_PATH}/gpt/LucidaTypewriterBold.ttf" -fill black -draw "text 160,50 \"$maxBLUE\" " $outputColorbar $outputColorbar
+
+return 0
+}
+
+
+# function that creates a full resolution tif product that can be correctly shown on GEP
+function visualization_product_creator_one_band(){
+# function call visualization_product_creator_one_band ${inputTif} ${sourceBandName} ${min_val} ${max_val} ${outputTif}
+inputTif=$1
+sourceBandName=$2
+min_val=$3
+max_val=$4
+outputTif=$5
+# check if min_val and max_val are absolute values or percentiles
+# pc values are assumed like pc<value> with <value> it's an integer between 0 and 100
+pc_test=$(echo "${min_val}" | grep "pc")
+[ "${pc_test}" = "" ] && pc_test="false"
+# extract coefficient for linear stretching (min and max out are related to a tiff with 8bit uint precision, 0 is kept for alpha band)
+min_out=1
+max_out=255
+if [ "${pc_test}" = "false" ]; then
+# min_val and max_val are absolute values
+    $_CIOP_APPLICATION_PATH/snap_s1_coh_cal_stacking/linearEquationCoefficients.py ${min_val} ${max_val} ${min_out} ${max_out} > ab.txt
+else
+# min_val and max_val are percentiles
+    #min max percentiles to be used in histogram stretching
+    pc_min=$( echo $min_val | sed -n -e 's|^.*pc\(.*\)|\1|p')
+    pc_max=$( echo $max_val | sed -n -e 's|^.*pc\(.*\)|\1|p')
+    pc_min_max=$( extract_pc1_pc2 $inputTif $sourceBandName $pc_min $pc_max )
+    [ $? -eq 0 ] || return ${ERR_CONVERT}
+    $_CIOP_APPLICATION_PATH/snap_s1_coh_cal_stacking/linearEquationCoefficients.py ${pc_min_max} ${min_out} ${max_out} > ab.txt
+fi 
+a=$( cat ab.txt | grep a | sed -n -e 's|^.*a=\(.*\)|\1|p')
+b=$( cat ab.txt | grep b |  sed -n -e 's|^.*b=\(.*\)|\1|p')
+
+ciop-log "INFO" "Linear stretching for image: $inputTif"
+SNAP_REQUEST=$( create_snap_request_linear_stretching "${inputTif}" "${sourceBandName}" "${a}" "${b}" "${min_out}" "${max_out}" "temp-outputfile.tif" )
+[ $? -eq 0 ] || return ${SNAP_REQUEST_ERROR}
+# invoke the ESA SNAP toolbox
+gpt ${SNAP_REQUEST} -c "${CACHE_SIZE}" &> /dev/null
+# check the exit code
+[ $? -eq 0 ] || return $ERR_SNAP
+
+ciop-log "INFO" "Reprojecting and alpha band addition to image: $inputTif"
+gdalwarp -ot Byte -srcnodata 0 -dstnodata 0 -dstalpha -co "TILED=YES" -co "BLOCKXSIZE=512" -co "BLOCKYSIZE=512" -co "ALPHA=YES" -t_srs EPSG:3857 temp-outputfile.tif ${outputTif} &> /dev/null
+returnCode=$?
+
+[ $returnCode -eq 0 ] || return ${ERR_CONVERT}
+rm -f temp-outputfile*
+#add overlay
+gdaladdo -r average ${outputTif} 2 4 8 16 &> /dev/null
+returnCode=$?
+[ $returnCode -eq 0 ] || return ${ERR_CONVERT}
+# echo of input min max values (usefule mainly when pc_test=true but provided in both cases)
+if [ "${pc_test}" = "false" ]; then
+    echo ${min_val} ${max_val}
+else
+    echo ${pc_min_max}
+fi
+
+return 0
+}
+
+
+#function that extracts a couple of percentiles from an input TIFF for the selected source band contained in it
+function extract_pc1_pc2(){
+# function call: extract_pc1_pc2 $tiffProduct $sourceBandName $pc1 $pc2
+
+# get number of inputs
+inputNum=$#
+# check on number of inputs
+if [ "$inputNum" -ne "4" ] ; then
+    return ${SNAP_REQUEST_ERROR}
+fi
+
+local tiffProduct=$1
+local sourceBandName=$2
+local pc1=$3
+local pc2=$4
+local pc_csv_list=${pc1},${pc2}
+# report activity in the log
+ciop-log "INFO" "Extracting percentiles ${pc1} and ${pc2} from ${sourceBandName} contained in ${tiffProduct}"
+# Build statistics file name
+statsFile=${TMPDIR}/temp.stats
+# prepare the SNAP request
+SNAP_REQUEST=$( create_snap_request_statsComputation "${tiffProduct}" "${sourceBandName}" "${statsFile}" "${pc_csv_list}" )
+[ $? -eq 0 ] || return ${SNAP_REQUEST_ERROR}
+# report activity in the log
+ciop-log "INFO" "Generated request file: ${SNAP_REQUEST}"
+# report activity in the log
+ciop-log "INFO" "Invoking SNAP-gpt on the generated request file for statistics extraction"
+# invoke the ESA SNAP toolbox
+gpt $SNAP_REQUEST -c "${CACHE_SIZE}" &> /dev/null
+# check the exit code
+[ $? -eq 0 ] || return $ERR_SNAP
+
+# get maximum from stats file
+percentile_1=$(cat "${statsFile}" | grep world | tr '\t' ' ' | tr -s ' ' | cut -d ' ' -f 8)
+#get minimum from stats file
+percentile_2=$(cat "${statsFile}" | grep world | tr '\t' ' ' | tr -s ' ' | cut -d ' ' -f 9)
+
+rm ${statsFile}
+echo ${percentile_1} ${percentile_2}
+return 0
+
+}
+
+
+function create_snap_request_linear_stretching(){
+# function call: create_snap_request_linear_stretching "${inputfileTIF}" "${sourceBandName}" "${linearCoeff}" "${offset}" "${min_out}" "${max_out}" "${outputfileTIF}"
+
+# function which creates the actual request from
+# a template and returns the path to the request
+
+# get number of inputs
+inputNum=$#
+# check on number of inputs
+if [ "$inputNum" -ne "7" ] ; then
+    return ${SNAP_REQUEST_ERROR}
+fi
+
+local inputfileTIF=$1
+local sourceBandName=$2
+local linearCoeff=$3
+local offset=$4
+local min_out=$5
+local max_out=$6
+local outputfileTIF=$7
+
+#sets the output filename
+snap_request_filename="${TMPDIR}/$( uuidgen ).xml"
+
+cat << EOF > ${snap_request_filename}
+<graph id="Graph">
+  <version>1.0</version>
+  <node id="Read">
+    <operator>Read</operator>
+    <sources/>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <file>${inputfileTIF}</file>
+    </parameters>
+  </node>
+  <node id="BandMaths">
+    <operator>BandMaths</operator>
+    <sources>
+      <sourceProduct refid="Read"/>
+    </sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <targetBands>
+        <targetBand>
+          <name>quantized</name>
+          <type>uint8</type>
+          <expression>if fneq(${sourceBandName},0) then max(min(floor(${sourceBandName}*${linearCoeff}+${offset}),${max_out}),${min_out}) else 0</expression>
+          <description/>
+          <unit/>
+          <noDataValue>0</noDataValue>
+        </targetBand>
+      </targetBands>
+      <variables/>
+    </parameters>
+  </node>
+  <node id="Write">
+    <operator>Write</operator>
+    <sources>
+      <sourceProduct refid="BandMaths"/>
+    </sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <file>${outputfileTIF}</file>
+      <formatName>GeoTIFF-BigTIFF</formatName>
+    </parameters>
+  </node>
+  <applicationData id="Presentation">
+    <Description/>
+    <node id="Read">
+            <displayPosition x="37.0" y="134.0"/>
+    </node>
+    <node id="BandMaths">
+      <displayPosition x="472.0" y="131.0"/>
+    </node>
+    <node id="Write">
+            <displayPosition x="578.0" y="133.0"/>
+    </node>
+  </applicationData>
+</graph>
+EOF
+[ $? -eq 0 ] && {
+    echo "${snap_request_filename}"
     return 0
+    } || return ${SNAP_REQUEST_ERROR}
 
+}
+
+
+function create_snap_sigmaMasterSlave_clip(){
+#function call create_snap_sigmaMasterSlave_clip  "${sigmaMasterSlaveCompositeTIF}" "${sigmaMasterBand}_db" "${sigmaSlaveBand}_db" "${min_val}" "${max_val}" "${sigmaMasterSlaveCompositeClip_TIF}" 
+## Function that starting from sigmaMasterSlave stack product, 
+## clips the backscatter db values between a min and max values 
+
+# Get number of input
+inputNum=$#
+# check on number of inputs
+if [ "$inputNum" -ne "6" ] ; then
+    return ${SNAP_REQUEST_ERROR}
+fi
+
+local sigmaMasterSlaveCompositeTIF=$1
+local sigmaMasterBand=$2
+local sigmaSlaveBand=$3
+local min_val=$4
+local max_val=$5
+local sigmaMasterSlaveCompositeClip_TIF=$6
+
+#sets the output filename
+snap_request_filename="${TMPDIR}/$( uuidgen ).xml"
+
+cat << EOF > ${snap_request_filename}
+<graph id="Graph">
+  <version>1.0</version>
+  <node id="Read">
+    <operator>Read</operator>
+    <sources/>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <file>$sigmaMasterSlaveCompositeTIF</file>
+    </parameters>
+  </node>
+  <node id="BandMaths(1)">
+    <operator>BandMaths</operator>
+    <sources>
+      <sourceProduct refid="Read"/>
+    </sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <targetBands>
+        <targetBand>
+          <name>$sigmaMasterBand</name>
+          <type>float32</type>
+          <expression>if (!nan($sigmaMasterBand) &amp;&amp; !nan($sigmaSlaveBand)) then (if $sigmaMasterBand&lt;=$min_val then $min_val else (if $sigmaMasterBand&gt;=$max_val then $max_val  else $sigmaMasterBand)) else NaN</expression>
+          <description/>
+          <unit/>
+          <noDataValue>NaN</noDataValue>
+        </targetBand>
+      </targetBands>
+      <variables/>
+    </parameters>
+  </node>
+  <node id="BandMaths(2)">
+    <operator>BandMaths</operator>
+    <sources>
+      <sourceProduct refid="Read"/>
+    </sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <targetBands>
+        <targetBand>
+          <name>$sigmaSlaveBand</name>
+          <type>float32</type>
+          <expression>if (!nan($sigmaMasterBand) &amp;&amp; !nan($sigmaSlaveBand)) then (if $sigmaSlaveBand&lt;=$min_val then $min_val else (if $sigmaSlaveBand&gt;=$max_val then $max_val  else $sigmaSlaveBand)) else NaN</expression>
+          <description/>
+          <unit/>
+          <noDataValue>NaN</noDataValue>
+        </targetBand>
+      </targetBands>
+      <variables/>
+    </parameters>
+  </node>
+  <node id="BandMerge">
+    <operator>BandMerge</operator>
+    <sources>
+      <sourceProduct refid="BandMaths(1)"/>
+      <sourceProduct.1 refid="BandMaths(2)"/>
+    </sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <sourceBands/>
+      <geographicError>1.0E-5</geographicError>
+    </parameters>
+  </node>
+  <node id="BandMaths(3)">
+    <operator>BandMaths</operator>
+    <sources>
+      <sourceProduct refid="BandMerge"/>
+    </sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <targetBands>
+        <targetBand>
+          <name>$sigmaMasterBand</name>
+          <type>float32</type>
+          <expression>if ($sigmaMasterBand!=0 &amp;&amp; $sigmaSlaveBand!=0) then $sigmaMasterBand  else NaN</expression>
+          <description/>
+          <unit/>
+          <noDataValue>NaN</noDataValue>
+        </targetBand>
+      </targetBands>
+      <variables/>
+    </parameters>
+  </node>
+  <node id="BandMaths(4)">
+    <operator>BandMaths</operator>
+    <sources>
+      <sourceProduct refid="BandMerge"/>
+    </sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <targetBands>
+        <targetBand>
+          <name>$sigmaSlaveBand</name>
+          <type>float32</type>
+          <expression>if ($sigmaMasterBand!=0 &amp;&amp; $sigmaSlaveBand!=0) then $sigmaSlaveBand  else NaN</expression>
+          <description/>
+          <unit/>
+          <noDataValue>NaN</noDataValue>
+        </targetBand>
+      </targetBands>
+      <variables/>
+    </parameters>
+  </node>
+  <node id="BandMerge(2)">
+    <operator>BandMerge</operator>
+    <sources>
+      <sourceProduct refid="BandMaths(3)"/>
+      <sourceProduct.1 refid="BandMaths(4)"/>
+    </sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <sourceBands/>
+      <geographicError>1.0E-5</geographicError>
+    </parameters>
+  </node>
+  <node id="Write">
+    <operator>Write</operator>
+    <sources>
+      <sourceProduct refid="BandMerge(2)"/>
+    </sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <file>$sigmaMasterSlaveCompositeClip_TIF</file>
+      <formatName>GeoTIFF-BigTIFF</formatName>
+    </parameters>
+  </node>
+  <applicationData id="Presentation">
+    <Description/>
+    <node id="Read">
+            <displayPosition x="37.0" y="134.0"/>
+    </node>
+    <node id="BandMaths">
+      <displayPosition x="472.0" y="131.0"/>
+    </node>
+    <node id="Write">
+            <displayPosition x="578.0" y="133.0"/>
+    </node>
+  </applicationData>
+</graph>
+EOF
+[ $? -eq 0 ] && {
+    echo "${snap_request_filename}"
+    return 0
+    } || return ${SNAP_REQUEST_ERROR}
 }
 
 
@@ -1151,46 +1549,11 @@ function main() {
     gpt $SNAP_REQUEST -c "${CACHE_SIZE}" &> /dev/null
     # check the exit code
     [ $? -eq 0 ] || return $ERR_SNAP
-    if [ ${QL_BRANCH} -eq 1 ]; then
-        ## Coherence Quick-Look
-        # Get size from coherence product
-        # coherence product name
-        coherenceName_IMG=$( ls ${coherence_Mrg_Ml_Tc}.data/coh*.img )
-    	ncols=$( gdalinfo ${coherenceName_IMG} | grep "Size is" | sed -n -e 's|Size is \(.*\),.*|\1|p' )
-    	nrows=$( gdalinfo ${coherenceName_IMG} | grep "Size is" | sed -n -e 's|Size is.*, \(.*\)|\1|p'  )
-    	ciop-log "DEBUG" "Number of columns of output product: ${ncols}"
-    	ciop-log "DEBUG" "Number of rows of output product: ${nrows}"
-    	# get ml factors for output quick-look generation
-    	targetNcols=2048
-    	rg_ml_factor_rel=$(echo "scale=0; $ncols/$targetNcols" | bc )
-    	ciop-log "DEBUG" "Range multilook factor relative to output product: ${rg_ml_factor_rel}"
-    	rg_ml_factor_ql=$(echo "scale=0; $rg_ml_factor_rel*$nRgLooks" | bc )
-    	az_ml_factor_ql=$(echo "scale=0; $rg_ml_factor_rel*$nAzLooks" | bc )
-    	pixelSpacingInMeter_ql=$(echo "scale=0; $rg_ml_factor_rel*$pixelSpacingInMeter" | bc )
-    	ciop-log "DEBUG" "Range multilook factor for QL: ${rg_ml_factor_ql}"
-    	ciop-log "DEBUG" "Azimuth multilook factor for QL: ${az_ml_factor_ql}"
-    	ciop-log "DEBUG" "Pixel spacing in meters QL: ${pixelSpacingInMeter_ql}"
-    	# report activity in the log
-    	ciop-log "INFO" "Preparing SNAP request file for merging, multilooking and terrain correction processing (Coherence Quick-Look product)"
-    	coherence_Mrg_Ml_Tc_QL=${TMPDIR}/target_IW_${polarisation}_Split_Orb_Cal_Back_ESD_Coh_Deb_Merge_ML_TC_QL
-    	# prepare the SNAP request
-    	SNAP_REQUEST=$( create_snap_request_mrg_ml_spk_tc "${inputCohDIM[@]}" "${polarisation}" "${az_ml_factor_ql}" "${rg_ml_factor_ql}" "${perform_speckle_filtering}" "${demType}" "${pixelSpacingInMeter_ql}" "${mapProjection}" "${coherence_Mrg_Ml_Tc_QL}" )
-    	[ $? -eq 0 ] || return ${SNAP_REQUEST_ERROR}
-    	[ $DEBUG -eq 1 ] && cat ${SNAP_REQUEST}
-    	# report activity in the log
-    	ciop-log "INFO" "Generated request file: ${SNAP_REQUEST}"
-    	# report activity in the log
-    	ciop-log "INFO" "Invoking SNAP-gpt on the generated request file for merging, multilooking and terrain correction processing (Coherence Quick-Look product)"
-    	# invoke the ESA SNAP toolbox
-    	gpt $SNAP_REQUEST -c "${CACHE_SIZE}" &> /dev/null
-    	# check the exit code
-    	[ $? -eq 0 ] || return $ERR_SNAP
-    fi
     ## Backscatter
     # output products filename
     sigma_Mrg_Ml_Tc=${TMPDIR}/target_IW_${polarisation}_Split_Orb_Cal_Back_ESD_Deb_Merge_ML_TC
-    # intensity is speckle filtered
-    perform_speckle_filtering="true"
+    # intensity no more speckle filtered according to updated requirements
+    perform_speckle_filtering="false"
     # report activity in the log
     ciop-log "INFO" "Preparing SNAP request file for merging, multilooking, speckle filtering and terrain correction processing (Backscatter product)"
     # prepare the SNAP request
@@ -1200,32 +1563,11 @@ function main() {
     # report activity in the log
     ciop-log "INFO" "Generated request file: ${SNAP_REQUEST}"
     # report activity in the log
-    ciop-log "INFO" "Invoking SNAP-gpt on the generated request file for merging, multilooking, speckle filtering and terrain correction processing (Backscatter product)"
+    ciop-log "INFO" "Invoking SNAP-gpt on the generated request file for merging, multilooking and terrain correction processing (Backscatter product)"
     # invoke the ESA SNAP toolbox
     gpt $SNAP_REQUEST -c "${CACHE_SIZE}" &> /dev/null
     # check the exit code
     [ $? -eq 0 ] || return $ERR_SNAP
-    if [ ${QL_BRANCH} -eq 1 ]; then
-        ## Backscatter Quick-Look
-    	# report activity in the log
-    	ciop-log "INFO" "Preparing SNAP request file for merging, multilooking, speckle filtering and terrain correction processing (Backscatter Quick-Look product)"
-    	# output products filename
-    	sigma_Mrg_Ml_Tc_QL=${TMPDIR}/target_IW_${polarisation}_Split_Orb_Cal_Back_ESD_Deb_Merge_ML_TC_QL
-    	# speckle filtering can be avoided with the very high multilook factor used for the quick-look generation
-    	perform_speckle_filtering="false"
-    	# prepare the SNAP request
-    	SNAP_REQUEST=$( create_snap_request_mrg_ml_spk_tc "${inputSigmaDIM[@]}" "${polarisation}" "${az_ml_factor_ql}" "${rg_ml_factor_ql}" "${perform_speckle_filtering}" "${demType}" "${pixelSpacingInMeter_ql}" "${mapProjection}" "${sigma_Mrg_Ml_Tc_QL}" )
-    	[ $? -eq 0 ] || return ${SNAP_REQUEST_ERROR}
-    	[ $DEBUG -eq 1 ] && cat ${SNAP_REQUEST}
-    	# report activity in the log
-    	ciop-log "INFO" "Generated request file: ${SNAP_REQUEST}"
-    	# report activity in the log
-    	ciop-log "INFO" "Invoking SNAP-gpt on the generated request file for merging, multilooking, speckle filtering and terrain correction processing (Backscatter Quick-Look product)"
-    	# invoke the ESA SNAP toolbox
-    	gpt $SNAP_REQUEST -c "${CACHE_SIZE}" &> /dev/null
-    	# check the exit code
-    	[ $? -eq 0 ] || return $ERR_SNAP
-    fi
     # cleanup input products for the merging, multilooking and terrain correction processing
     rm -rf "${INPUTDIR}"/*	
     
@@ -1250,27 +1592,6 @@ function main() {
     # check the exit code
     [ $? -eq 0 ] || return $ERR_SNAP
     [ $DEBUG -eq 1 ] && cat ${SNAP_REQUEST}
-    if [ ${QL_BRANCH} -eq 1 ]; then
-        ## Stacking for QL product
-    	sigma_Mrg_Ml_Tc_QL_DIM=${sigma_Mrg_Ml_Tc_QL}.dim
-    	coherence_Mrg_Ml_Tc_QL_DIM=${coherence_Mrg_Ml_Tc_QL}.dim
-    	# output product filename
-    	stackProduct_QL=${TMPDIR}/target_IW_${polarisation}_Coh_Sigma_Stack_QL
-    	# report activity in the log
-    	ciop-log "INFO" "Preparing SNAP request file to create stack with Master Backscatter, Slave Backscatter and Coherence products (Quick-Look product)"
-    	# prepare the SNAP request
-    	SNAP_REQUEST=$( create_snap_request_stack "${sigma_Mrg_Ml_Tc_QL_DIM}" "${coherence_Mrg_Ml_Tc_QL_DIM}" "${stackProduct_QL}" )
-    	[ $? -eq 0 ] || return ${SNAP_REQUEST_ERROR}
-    	[ $DEBUG -eq 1 ] && cat ${SNAP_REQUEST}
-    	# report activity in the log
-    	ciop-log "INFO" "Generated request file: ${SNAP_REQUEST}"
-    	# report activity in the log
-    	ciop-log "INFO" "Invoking SNAP-gpt on the generated request file to create stack with Master Backscatter, Slave Backscatter and Coherence products (Quick-Look product)"
-    	# invoke the ESA SNAP toolbox
-    	gpt $SNAP_REQUEST -c "${CACHE_SIZE}" &> /dev/null
-    	# check the exit code
-    	[ $? -eq 0 ] || return $ERR_SNAP
-    fi
     ### AUX: get master/slave backscatter and coherence source bands from the stack product
     # The source band names are useful for the following processing
     local sigmaMasterBand
@@ -1308,9 +1629,9 @@ function main() {
     sigmaSlaveName=${OUTPUTDIR}/${sigmaSlaveBasename}
     coherenceBasename=coherence_IW_${polarisation}_${dateMaster}_${dateSlave}
     coherenceName=${OUTPUTDIR}/${coherenceBasename}
-    rgbCompositeBasename=combined_coh_sigmaAvrg_sigmaDiff_IW_${polarisation}_${dateMaster}_${dateSlave}
+    rgbCompositeBasename=coh_sigmaAvrg_sigmaDiff_IW_${polarisation}_${dateMaster}_${dateSlave}
     rgbCompositeName=${OUTPUTDIR}/${rgbCompositeBasename}
-    sigmaMasterSlaveCompositeBasename=combined_sigmaMaster_dB_sigmaSlave_dB_IW_${polarisation}_${dateMaster}_${dateSlave}
+    sigmaMasterSlaveCompositeBasename=sigmaMaster_dB_${dateMaster}_sigmaSlave_dB_${dateSlave}_sigmaSlave_dB_${dateSlave}_IW_${polarisation}
     sigmaMasterSlaveComposite=${OUTPUTDIR}/${sigmaMasterSlaveCompositeBasename}
     # report activity in the log
     ciop-log "INFO" "Preparing SNAP request file to Backscatter average and difference computation (in dB) and individual bands extraction from stack product"
@@ -1326,46 +1647,6 @@ function main() {
     gpt $SNAP_REQUEST -c "${CACHE_SIZE}" &> /dev/null
     # check the exit code
     [ $? -eq 0 ] || return $ERR_SNAP
-    if [ ${QL_BRANCH} -eq 1 ]; then
-        ## perform dB computations and individual bands extraction for Quick-Look product
-    	stackProduct_QL_DIM=${stackProduct_QL}.dim
-    	sigmaDiffBasename_QL=sigmaDiff_dB_IW_${polarisation}_${dateMaster}_${dateSlave}_QL
-    	sigmaDiffName_QL=${TMPDIR}/${sigmaDiffBasename_QL}
-    	sigmaAverageBasename_QL=sigmaAverage_dB_IW_${polarisation}_${dateMaster}_${dateSlave}_QL
-    	sigmaAverageName_QL=${TMPDIR}/${sigmaAverageBasename_QL}
-    	sigmaMasterBasename_QL=sigmaMaster_dB_IW_${polarisation}_${dateMaster}_QL
-    	sigmaMasterName_QL=${TMPDIR}/${sigmaMasterBasename_QL}
-    	sigmaSlaveBasename_QL=sigmaSlave_dB_IW_${polarisation}_${dateSlave}_QL
-    	sigmaSlaveName_QL=${TMPDIR}/${sigmaSlaveBasename_QL}
-    	coherenceBasename_QL=coherence_IW_${polarisation}_${dateMaster}_${dateSlave}_QL
-    	coherenceName_QL=${TMPDIR}/${coherenceBasename_QL}
-    	# report activity in the log
-    	ciop-log "INFO" "Preparing SNAP request file to Backscatter average and difference computation (in dB) and individual bands extraction from stack product (Quick-Look product)"
-    	# prepare the SNAP request
-    	SNAP_REQUEST=$( create_snap_sigmaAvrgDiff_bandExtract "${stackProduct_QL_DIM}" "${sigmaMasterBand}" "${sigmaSlaveBand}" "${coherenceBand}" "${sigmaDiffName_QL}" "${sigmaAverageName_QL}" "${sigmaMasterName_QL}" "${sigmaSlaveName_QL}" "${coherenceName_QL}")
-    	[ $? -eq 0 ] || return ${SNAP_REQUEST_ERROR}
-    	[ $DEBUG -eq 1 ] && cat ${SNAP_REQUEST}
-    	# report activity in the log
-    	ciop-log "INFO" "Generated request file: ${SNAP_REQUEST}"
-    	# report activity in the log
-    	ciop-log "INFO" "Invoking SNAP-gpt on the generated request file to Backscatter average and difference computation (in dB) and individual bands extraction from stack product (Quick-Look product)"
-    	# invoke the ESA SNAP toolbox
-    	gpt $SNAP_REQUEST -c "${CACHE_SIZE}" &> /dev/null
-    	# check the exit code
-    	[ $? -eq 0 ] || return $ERR_SNAP
-    else
-        stackProduct_QL_DIM=${stackProduct_DIM}
-        sigmaDiffBasename_QL=${sigmaDiffBasename}
-        sigmaDiffName_QL=${sigmaDiffName}
-        sigmaAverageBasename_QL=${sigmaAverageBasename}
-        sigmaAverageName_QL=${sigmaAverageName}
-        sigmaMasterBasename_QL=${sigmaMasterBasename}
-        sigmaMasterName_QL=${sigmaMasterName}
-        sigmaSlaveBasename_QL=${sigmaSlaveBasename}
-        sigmaSlaveName_QL=${sigmaSlaveName}
-        coherenceBasename_QL=${coherenceBasename}
-        coherenceName_QL=${coherenceName}
-    fi
     # sigma master product
     sigmaMasterName_TIF=${sigmaMasterName}.tif
     # sigma slave product
@@ -1377,240 +1658,189 @@ function main() {
     # sigma difference product
     sigmaDiffName_TIF=${sigmaDiffName}.tif
 
-    ### QUICK LOOK PRODUCTS GENERATION
+    ### FULL RESOLUTION PRODUCTS GENERATION
     # report activity in the log
-    ciop-log "INFO" "Creating quick-look for each output product"
+    ciop-log "INFO" "Creating full resolution visualization products"
     ## Create RGB composite R=coherence G=sigmaAverage B=sigmaDiff
     rgbCompositeNameTIF=${rgbCompositeName}.tif
     # Full Resolution product 8 bit encoded (supported by GEP V2 for a potential full resolution visualization)
-    rgbCompositeNameFullResTIF=${rgbCompositeName}_FullRes.tif
+    rgbCompositeNameFullResTIF=${rgbCompositeName}.rgb.tif
     pconvert -b 1,2,3 -f tif -o ${TMPDIR} ${rgbCompositeNameTIF} &> /dev/null
     # check the exit code
     [ $? -eq 0 ] || return $ERR_PCONVERT
     # output of pconvert
     pconvertOutRgbCompositeTIF=${TMPDIR}/${rgbCompositeBasename}.tif
-    gdal_translate -ot Byte -of GTiff -b 1 -b 2 -b 3 -scale -co "TILED=YES" -co "BLOCKXSIZE=512" -co "BLOCKYSIZE=512" -co "PHOTOMETRIC=RGB" -co "ALPHA=YES" ${pconvertOutRgbCompositeTIF} ${TMPDIR}/temp-outputfile.tif
+    # reprojection
+    gdalwarp -ot Byte -t_srs EPSG:3857 -srcalpha -dstalpha -co "TILED=YES" -co "BLOCKXSIZE=512" -co "BLOCKYSIZE=512" -co "PHOTOMETRIC=RGB" -co "ALPHA=YES" ${pconvertOutRgbCompositeTIF} ${rgbCompositeNameFullResTIF}
     returnCode=$?
     [ $returnCode -eq 0 ] || return ${ERR_CONVERT}
-    gdalwarp -ot Byte -t_srs EPSG:3857 -srcnodata 0 -dstnodata 0 -dstalpha -co "TILED=YES" -co "BLOCKXSIZE=512" -co "BLOCKYSIZE=512" -co "PHOTOMETRIC=RGB" -co "ALPHA=YES" ${TMPDIR}/temp-outputfile.tif ${rgbCompositeNameFullResTIF}
-    returnCode=$?
-    [ $returnCode -eq 0 ] || return ${ERR_CONVERT}
-    #Add overviews
+    # Add overviews
     gdaladdo -r average ${rgbCompositeNameFullResTIF} 2 4 8 16
     returnCode=$?
     [ $returnCode -eq 0 ] || return ${ERR_CONVERT}
-    rm ${TMPDIR}/temp-outputfile.tif
-    # RGB Quick-look
-    # Fix of not overlapping master and slave visualization issue by producing an image with the minimum extent (i.e. the coherence).
-    # pconvert already fix this issue by using footprint of first band (coherence) 
-    combinedRGB=combined_coh_sigmaAvrg_sigmaDiff_IW_${polarisation}_${dateMaster}_${dateSlave}_QL
-    # pconvert to have a tiff with 2048 pixel width (it also produces all bands with 0 outside image borders), overwrite of previous full resolution tif pconvertOutRgbCompositeTIF 
-    pconvert -b 1,2,3 -W 2048 -f tif -o ${TMPDIR} ${pconvertOutRgbCompositeTIF} &> /dev/null
-    # check the exit code
-    [ $? -eq 0 ] || return $ERR_PCONVERT
-    # alpha band is corrupted by pconvert resampling --> use gdal_translate to remove alpha band
-    gdal_translate -ot Byte -of PNG -b 1 -b 2 -b 3 -scale ${pconvertOutRgbCompositeTIF} ${TMPDIR}/temp-outputfile.png
-    returnCode=$?
-    [ $returnCode -eq 0 ] || return ${ERR_CONVERT}
-    # convert to remove black (zero) background
-    convert ${TMPDIR}/temp-outputfile.png -alpha set -channel RGBA -fill none -opaque black ${OUTPUTDIR}/${combinedRGB}.png &> /dev/null
-    rm ${TMPDIR}/temp-outputfile.png
+    rm ${pconvertOutRgbCompositeTIF}
+    # extract percetiles values for the visualized bands (2 and 96 are the default values used by pconvert)
+    pc_min=2
+    pc_max=96
+    min_max_coh=$( extract_pc1_pc2 $rgbCompositeNameTIF $coherenceBand $pc_min $pc_max )
+    min_max_sigma_avg=$( extract_pc1_pc2 $rgbCompositeNameTIF "sigmaAverage" $pc_min $pc_max )
+    min_max_sigma_diff=$( extract_pc1_pc2 $rgbCompositeNameTIF "sigmaDiff" $pc_min $pc_max )  
+    # remove physical product
+    rm ${rgbCompositeNameTIF}
+    # visualization product is the unique generated output for the RGB combination
+    mv ${rgbCompositeNameFullResTIF} ${rgbCompositeNameTIF}
+    # Colorbar legend to be customized with product statistics
+    colorbarInput=$_CIOP_APPLICATION_PATH/gpt/rgb_cube_coh_sigmaAvg_SigmaDiff.png # RGB cube
+    # Output name of customized colorbar legend
+    rgbCompositeColorbarOutput=${rgbCompositeName}.tif.legend.png
+    # colorbar description
+    colorbarDescription="Coherence and Intensity RGB combination"
+    #Customize colorbar with product statistics
+    retVal=$(colorbarCreatorRGB "${colorbarInput}" "${colorbarDescription}" ${min_max_coh} ${min_max_sigma_avg} ${min_max_sigma_diff} "${rgbCompositeColorbarOutput}" )
+    ## Full resolution image creation for Sigma Master product
+    # Visualization product name
+    sigmaMasterNameFullResTIF=${sigmaMasterName}.rgb.tif
+    # Source band name 
+    sourceBand=${sigmaMasterBand}_db
+    # define min max values in dB for sigma visualization
+    min_val=-15
+    max_val=5
+    # call function for visualization product generator 
+    min_max_val=$( visualization_product_creator_one_band "${sigmaMasterName_TIF}" "${sourceBand}" "${min_val}" "${max_val}" "${sigmaMasterNameFullResTIF}" )
+    retCode=$?
+    [ $DEBUG -eq 1 ] && echo min_max_val $min_max_val
+    [ $retCode -eq 0 ] || return $retCode
+    # Colorbar legend to be customized with product statistics
+    colorbarInput=$_CIOP_APPLICATION_PATH/gpt/colorbar_gray.png #sample Gray Colorbar (as used by pconvert with single band products) colorbar image
+    # Output name of customized colorbar legend
+    sigmaMasterColorbarOutput=${sigmaMasterName}.tif.legend.png
+    # colorbar description
+    colorbarDescription="Sigma_0 Master [dB]"
+    #Customize colorbar with product statistics
+    retVal=$(colorbarCreator "${colorbarInput}" "${colorbarDescription}" ${min_max_val} "${sigmaMasterColorbarOutput}" )
+    ## Full resolution image creation for Sigma Slave product
+    # Visualization product name
+    sigmaSlaveNameFullResTIF=${sigmaSlaveName}.rgb.tif
+    # Source band name
+    sourceBand=${sigmaSlaveBand}_db
+    # call function for visualization product generator
+    min_max_val=$( visualization_product_creator_one_band "${sigmaSlaveName_TIF}" "${sourceBand}" "${min_val}" "${max_val}" "${sigmaSlaveNameFullResTIF}" )
+    retCode=$?
+    [ $DEBUG -eq 1 ] && echo min_max_val $min_max_val
+    [ $retCode -eq 0 ] || return $retCode
+    # Output name of customized colorbar legend
+    sigmaSlaveColorbarOutput=${sigmaSlaveName}.tif.legend.png
+    # colorbar description
+    colorbarDescription="Sigma_0 Slave [dB]"
+    # Customize colorbar with product statistics
+    retVal=$(colorbarCreator "${colorbarInput}" "${colorbarDescription}" ${min_max_val} "${sigmaSlaveColorbarOutput}" )
+    ## Full resolution image creation for Coeherence product
+    # Visualization product name
+    coherenceNameFullResTIF=${coherenceName}.rgb.tif
+    # Build source band name for statistics computation
+    sourceBand=${coherenceBand}
+    # define percentiles min max values for coherence visualization
+    min_val="pc2"
+    max_val="pc96"
+    # call function for visualization product generator
+    min_max_val=$( visualization_product_creator_one_band "${coherenceName_TIF}" "${sourceBand}" "${min_val}" "${max_val}" "${coherenceNameFullResTIF}" )
+    retCode=$?
+    [ $DEBUG -eq 1 ] && echo min_max_val $min_max_val
+    [ $retCode -eq 0 ] || return $retCode
+    # Colorbar legend to be customized with product statistics
+    colorbarInput=$_CIOP_APPLICATION_PATH/gpt/colorbar_gray.png #sample Gray Colorbar (as used by pconvert with single band products) colorbar image
+    # Output name of customized colorbar legend
+    coherenceColorbarOutput=${coherenceName}.tif.legend.png
+    # colorbar description
+    colorbarDescription="Coherence"
+    # Customize colorbar with product statistics
+    retVal=$(colorbarCreator "${colorbarInput}" "${colorbarDescription}" ${min_max_val} "${coherenceColorbarOutput}" )
+    ## Full resolution image creation for Sigma Average product
+    # Visualization product name
+    sigmaAverageNameFullResTIF=${sigmaAverageName}.rgb.tif
+    # Build source band name for statistics computation
+    sourceBand="sigmaAverage"
+    # define min max values for sigma average visualization
+    min_val=-15
+    max_val=5
+    # call function for visualization product generator
+    min_max_val=$( visualization_product_creator_one_band "${sigmaAverageName_TIF}" "${sourceBand}" "${min_val}" "${max_val}" "${sigmaAverageNameFullResTIF}" )
+    retCode=$?
+    [ $DEBUG -eq 1 ] && echo min_max_val $min_max_val
+    [ $retCode -eq 0 ] || return $retCode
+    # Colorbar legend to be customized with product statistics
+    colorbarInput=$_CIOP_APPLICATION_PATH/gpt/colorbar_gray.png #sample Gray Colorbar (as used by pconvert with single band products) colorbar image
+    # Output name of customized colorbar legend
+    sigmaAverageColorbarOutput=${sigmaAverageName}.tif.legend.png
+    # colorbar description
+    colorbarDescription="Sigma_0 Average [dB]"
+    #Customize colorbar with product statistics
+    retVal=$(colorbarCreator "${colorbarInput}" "${colorbarDescription}" ${min_max_val} "${sigmaAverageColorbarOutput}" )
+     ## Full resolution image creation for Sigma Difference product
+    # Visualization product name
+    sigmaDiffNameFullResTIF=${sigmaDiffName}.rgb.tif
+    # Build source band name for statistics computation
+    sourceBand="sigmaDiff"
+    # define min max percebtiles values for sigma average visualization
+    min_val="pc2"
+    max_val="pc96"
+    # call function for visualization product generator
+    min_max_val=$( visualization_product_creator_one_band "${sigmaDiffName_TIF}" "${sourceBand}" "${min_val}" "${max_val}" "${sigmaDiffNameFullResTIF}" )
+    retCode=$?
+    [ $DEBUG -eq 1 ] && echo min_max_val $min_max_val
+    [ $retCode -eq 0 ] || return $retCode
+    # Colorbar legend to be customized with product statistics
+    colorbarInput=$_CIOP_APPLICATION_PATH/gpt/colorbar_gray.png #sample Gray Colorbar (as used by pconvert with single band products) colorbar image
+    # Output name of customized colorbar legend
+    sigmaDiffColorbarOutput=${sigmaDiffName}.tif.legend.png
+    # colorbar description
+    colorbarDescription="Sigma_0 Difference [dB]"
+    # Customize colorbar with product statistics
+    retVal=$(colorbarCreator "${colorbarInput}" "${colorbarDescription}" ${min_max_val} "${sigmaDiffColorbarOutput}" )
     ## Create RGB composite R=sigma master G=sigma slave B=sigma slave
     sigmaMasterSlaveCompositeTIF=${sigmaMasterSlaveComposite}.tif
-    # Full Resolution product 8 bit encoded (supported by GEP V2 for a potential full resolution visualization)
-    sigmaMasterSlaveCompositeFullResTIF=${sigmaMasterSlaveComposite}_FullRes.tif
-    pconvert -b 1,2,2 -f tif -o ${TMPDIR} ${sigmaMasterSlaveCompositeTIF} &> /dev/null
+    sigmaMasterSlaveCompositeClip_TIF=${sigmaMasterSlaveComposite}_clip.tif
+    # Clip values between -15 and +5 dB 
+    # report activity in the log
+    ciop-log "INFO" "Preparing SNAP request file to clip Backscatter master and slave values"
+    min_val=-15
+    max_val=5
+    # prepare the SNAP request
+    SNAP_REQUEST=$( create_snap_sigmaMasterSlave_clip "${sigmaMasterSlaveCompositeTIF}" "${sigmaMasterBand}_db" "${sigmaSlaveBand}_db" "${min_val}" "${max_val}" "${sigmaMasterSlaveCompositeClip_TIF}" )
+    [ $? -eq 0 ] || return ${SNAP_REQUEST_ERROR}
+    [ $DEBUG -eq 1 ] && cat ${SNAP_REQUEST}
+    # report activity in the log
+    ciop-log "INFO" "Generated request file: ${SNAP_REQUEST}"
+    # report activity in the log
+    ciop-log "INFO" "Invoking SNAP-gpt on the generated request file clip Backscatter master and slave values"
+    # invoke the ESA SNAP toolbox
+    gpt $SNAP_REQUEST -c "${CACHE_SIZE}" &> /dev/null
+    # check the exit code
+    [ $? -eq 0 ] || return $ERR_SNAP
+    # Full Resolution product 8 bit encoded
+    # The unique output for the RGB combination is the visualization product 
+    rm ${sigmaMasterSlaveCompositeTIF}
+    sigmaMasterSlaveCompositeFullResTIF=${sigmaMasterSlaveCompositeTIF}
+    pconvert -b 1,2,2 -s 0,0 -f tif -o ${TMPDIR} ${sigmaMasterSlaveCompositeClip_TIF} &> /dev/null
     # check the exit code
     [ $? -eq 0 ] || return $ERR_PCONVERT
     # output of pconvert
-    pconvertOutTIF=${TMPDIR}/${sigmaMasterSlaveCompositeBasename}.tif
-    gdal_translate -ot Byte -of GTiff -b 1 -b 2 -b 3 -scale -co "TILED=YES" -co "BLOCKXSIZE=512" -co "BLOCKYSIZE=512" -co "PHOTOMETRIC=RGB" -co "ALPHA=YES" ${pconvertOutTIF} ${TMPDIR}/temp-outputfile.tif
-    returnCode=$?
-    [ $returnCode -eq 0 ] || return ${ERR_CONVERT}
-    gdalwarp -ot Byte -t_srs EPSG:3857 -srcnodata 0 -dstnodata 0 -dstalpha -co "TILED=YES" -co "BLOCKXSIZE=512" -co "BLOCKYSIZE=512" -co "PHOTOMETRIC=RGB" -co "ALPHA=YES" ${TMPDIR}/temp-outputfile.tif ${sigmaMasterSlaveCompositeFullResTIF}
-    returnCode=$?
-    [ $returnCode -eq 0 ] || return ${ERR_CONVERT}
+    pconvertOutTIF=${TMPDIR}/${sigmaMasterSlaveCompositeBasename}_clip.tif
+    # reprojection
+    gdalwarp -ot Byte -t_srs EPSG:3857 -srcalpha -dstalpha -co "TILED=YES" -co "BLOCKXSIZE=512" -co "BLOCKYSIZE=512" -co "PHOTOMETRIC=RGB" -co "ALPHA=YES" ${pconvertOutTIF} ${sigmaMasterSlaveCompositeFullResTIF}
     #Add overviews
     gdaladdo -r average ${sigmaMasterSlaveCompositeFullResTIF} 2 4 8 16
     returnCode=$?
     [ $returnCode -eq 0 ] || return ${ERR_CONVERT}
-    rm ${TMPDIR}/temp-outputfile.tif
-    # RGB Quick-look
-    # Fix of not overlapping master and slave visualization issue by producing an image with the minimum extent (i.e. the coherence).
-    # pconvert already fix this issue by using footprint of first band (coherence)
-    sigmaMasterSlaveCompositeRGB=${sigmaMasterSlaveCompositeBasename}_QL
-    # pconvert to have a tiff with 2048 pixel width (it also produces all bands with 0 outside image borders), overwrite of previous full resolution tif pconvertOutTIF
-    pconvert -b 1,2,3 -W 2048 -f tif -o ${TMPDIR} ${pconvertOutTIF} &> /dev/null
-    # check the exit code
-    [ $? -eq 0 ] || return $ERR_PCONVERT
-    # alpha band is corrupted by pconvert resampling --> use gdal_translate to remove alpha band
-    gdal_translate -ot Byte -of PNG -b 1 -b 2 -b 3 -scale ${pconvertOutTIF} ${TMPDIR}/temp-outputfile.png
-    returnCode=$?
-    [ $returnCode -eq 0 ] || return ${ERR_CONVERT}
-    # convert to remove black (zero) background
-    convert ${TMPDIR}/temp-outputfile.png -alpha set -channel RGBA -fill none -opaque black ${OUTPUTDIR}/${sigmaMasterSlaveCompositeRGB}.png &> /dev/null
-    rm ${TMPDIR}/temp-outputfile.png
-    ## sigma master product
-    sigmaMasterName_QL_TIF=${sigmaMasterName_QL}.tif
-    pconvert -f png -b 1 -W 2048 -o "${OUTPUTDIR}" "${sigmaMasterName_QL_TIF}" &> /dev/null
-    # check the exit code
-    [ $? -eq 0 ] || return $ERR_PCONVERT
-    # statistics extraction
-    # Build source band name for statistics computation
-    sourceBand=${sigmaMasterBand}_db
-    # Build statistics file name
-    statsFile=${TMPDIR}/temp.stats
-    # prepare the SNAP request
-    SNAP_REQUEST=$( create_snap_request_statsComputation "${sigmaMasterName_TIF}" "${sourceBand}" "${statsFile}" )
-    [ $? -eq 0 ] || return ${SNAP_REQUEST_ERROR}
-    [ $DEBUG -eq 1 ] && cat ${SNAP_REQUEST}
-    # report activity in the log
-    ciop-log "INFO" "Generated request file: ${SNAP_REQUEST}"
-    # report activity in the log
-    ciop-log "INFO" "Invoking SNAP-gpt on the generated request file for statistics extraction from Master backscatter dB product"
-    # invoke the ESA SNAP toolbox
-    gpt $SNAP_REQUEST -c "${CACHE_SIZE}" &> /dev/null
-    # check the exit code
-    [ $? -eq 0 ] || return $ERR_SNAP
-    #Colorbar legend to be customized with product statistics
-    colorbarInput=$_CIOP_APPLICATION_PATH/gpt/colorbar_gray.png #sample Gray Colorbar (as used by pconvert with single band products) colorbar image
-    #Output name of customized colorbar legend
-    sigmaMasterColorbarOutput=${sigmaMasterName}_legend.png
-    sigmaMasterColorbarBasename=$(basename "${sigmaMasterColorbarOutput}")
+    rm ${pconvertOutTIF} ${sigmaMasterSlaveCompositeClip_TIF}
+    # Colorbar legend to be customized with product statistics
+    colorbarInput=$_CIOP_APPLICATION_PATH/gpt/rgb_cube_sigmaM_sigmaS_sigmaS.png # RGB cube
+    # Output name of customized colorbar legend
+    sigmaMasterSlaveCompositeColorbarOutput=${sigmaMasterSlaveComposite}.tif.legend.png
     # colorbar description
-    colorbarDescription="Sigma_0 Master [dB]"
+    colorbarDescription="Sigma Master and Sigma Slave RGB combination"
     #Customize colorbar with product statistics
-    retVal=$(colorbarCreator "${colorbarInput}" "${colorbarDescription}" "${statsFile}" "${sigmaMasterColorbarOutput}" )
-    rm ${statsFile}
-    ## sigma slave product
-    sigmaSlaveName_QL_TIF=${sigmaSlaveName_QL}.tif
-    pconvert -f png -b 1 -W 2048 -o "${OUTPUTDIR}" "${sigmaSlaveName_QL_TIF}" &> /dev/null
-    # check the exit code
-    [ $? -eq 0 ] || return $ERR_PCONVERT
-    # statistics extraction
-    # Build source band name for statistics computation
-    sourceBand=${sigmaSlaveBand}_db
-    # Build statistics file name
-    statsFile=${TMPDIR}/temp.stats
-    # prepare the SNAP request
-    SNAP_REQUEST=$( create_snap_request_statsComputation "${sigmaSlaveName_TIF}" "${sourceBand}" "${statsFile}" )
-    [ $? -eq 0 ] || return ${SNAP_REQUEST_ERROR}
-    [ $DEBUG -eq 1 ] && cat ${SNAP_REQUEST}
-    # report activity in the log
-    ciop-log "INFO" "Generated request file: ${SNAP_REQUEST}"
-    # report activity in the log
-    ciop-log "INFO" "Invoking SNAP-gpt on the generated request file for statistics extraction from Slave backscatter product"
-    # invoke the ESA SNAP toolbox
-    gpt $SNAP_REQUEST -c "${CACHE_SIZE}" &> /dev/null
-    # check the exit code
-    [ $? -eq 0 ] || return $ERR_SNAP
-    #Output name of customized colorbar legend
-    sigmaSlaveColorbarOutput=${sigmaSlaveName}_legend.png
-    sigmaSlaveColorbarBasename=$(basename "${sigmaSlaveColorbarOutput}")
-    # colorbar description
-    colorbarDescription="Sigma_0 Slave [dB]"
-    #Customize colorbar with product statistics
-    retVal=$(colorbarCreator "${colorbarInput}" "${colorbarDescription}" "${statsFile}" "${sigmaSlaveColorbarOutput}" )
-    rm ${statsFile}
-    ## coherence product
-    coherenceName_QL_TIF=${coherenceName_QL}.tif
-    pconvert -f png -b 1 -W 2048 -o "${OUTPUTDIR}" "${coherenceName_QL_TIF}" &> /dev/null
-    # check the exit code
-    [ $? -eq 0 ] || return $ERR_PCONVERT
-    # statistics extraction
-    # Build source band name for statistics computation
-    sourceBand=${coherenceBand}
-    # Build statistics file name
-    statsFile=${TMPDIR}/temp.stats
-    # prepare the SNAP request
-    SNAP_REQUEST=$( create_snap_request_statsComputation "${coherenceName_TIF}" "${sourceBand}" "${statsFile}" )
-    [ $? -eq 0 ] || return ${SNAP_REQUEST_ERROR}
-    [ $DEBUG -eq 1 ] && cat ${SNAP_REQUEST}
-    # report activity in the log
-    ciop-log "INFO" "Generated request file: ${SNAP_REQUEST}"
-    # report activity in the log
-    ciop-log "INFO" "Invoking SNAP-gpt on the generated request file for statistics extraction from Coherence product"
-    # invoke the ESA SNAP toolbox
-    gpt $SNAP_REQUEST -c "${CACHE_SIZE}" &> /dev/null
-    # check the exit code
-    [ $? -eq 0 ] || return $ERR_SNAP
-    #Output name of customized colorbar legend
-    coherenceColorbarOutput=${coherenceName}_legend.png
-    coherenceColorbarBasename=$(basename "${coherenceColorbarOutput}")
-    # colorbar description
-    colorbarDescription="Coherence"
-    #Customize colorbar with product statistics
-    retVal=$(colorbarCreator "${colorbarInput}" "${colorbarDescription}" "${statsFile}" "${coherenceColorbarOutput}" )
-    rm ${statsFile}
-    ## sigma average product
-    sigmaAverageName_QL_TIF=${sigmaAverageName_QL}.tif
-    # alpha band is corrupted by pconvert resampling --> use gdal_translate to remove alpha band
-    gdal_translate -ot Byte -of PNG -b 2 -scale ${pconvertOutRgbCompositeTIF} ${TMPDIR}/temp-outputfile.png
-    returnCode=$?
-    [ $returnCode -eq 0 ] || return ${ERR_CONVERT}
-    # convert to remove black (zero) background
-    convert ${TMPDIR}/temp-outputfile.png -alpha set -channel RGBA -fill none -opaque black ${OUTPUTDIR}/${sigmaAverageBasename_QL}.png &> /dev/null
-    rm ${TMPDIR}/temp-outputfile.png
-    # statistics extraction
-    # Build source band name for statistics computation
-    sourceBand="sigmaAverage"
-    # Build statistics file name
-    statsFile=${TMPDIR}/temp.stats
-    # prepare the SNAP request
-    SNAP_REQUEST=$( create_snap_request_statsComputation "${sigmaAverageName_TIF}" "${sourceBand}" "${statsFile}" )
-    [ $? -eq 0 ] || return ${SNAP_REQUEST_ERROR}
-    [ $DEBUG -eq 1 ] && cat ${SNAP_REQUEST}
-    # report activity in the log
-    ciop-log "INFO" "Generated request file: ${SNAP_REQUEST}"
-    # report activity in the log
-    ciop-log "INFO" "Invoking SNAP-gpt on the generated request file for statistics extraction from Sigma Average product"
-    # invoke the ESA SNAP toolbox
-    gpt $SNAP_REQUEST -c "${CACHE_SIZE}" &> /dev/null
-    # check the exit code
-    [ $? -eq 0 ] || return $ERR_SNAP
-    #Output name of customized colorbar legend
-    sigmaAverageColorbarOutput=${sigmaAverageName}_legend.png
-    sigmaAverageColorbarBasename=$(basename "${sigmaAverageColorbarOutput}")
-    # colorbar description
-    colorbarDescription="Sigma_0 Average [dB]"
-    #Customize colorbar with product statistics
-    retVal=$(colorbarCreator "${colorbarInput}" "${colorbarDescription}" "${statsFile}" "${sigmaAverageColorbarOutput}" )
-    rm ${statsFile}
-    ## sigma difference product
-    sigmaDiffName_QL_TIF=${sigmaDiffName_QL}.tif
-    # alpha band is corrupted by pconvert resampling --> use gdal_translate to remove alpha band
-    gdal_translate -ot Byte -of PNG -b 3 -scale ${pconvertOutRgbCompositeTIF} ${TMPDIR}/temp-outputfile.png
-    returnCode=$?
-    [ $returnCode -eq 0 ] || return ${ERR_CONVERT}
-    # convert to remove black (zero) background
-    convert ${TMPDIR}/temp-outputfile.png -alpha set -channel RGBA -fill none -opaque black ${OUTPUTDIR}/${sigmaDiffBasename_QL}.png &> /dev/null
-    # statistics extraction
-    # Build source band name for statistics computation
-    sourceBand="sigmaDiff"
-    # Build statistics file name
-    statsFile=${TMPDIR}/temp.stats
-    # prepare the SNAP request
-    SNAP_REQUEST=$( create_snap_request_statsComputation "${sigmaDiffName_TIF}" "${sourceBand}" "${statsFile}" )
-    [ $? -eq 0 ] || return ${SNAP_REQUEST_ERROR}
-    [ $DEBUG -eq 1 ] && cat ${SNAP_REQUEST}
-    # report activity in the log
-    ciop-log "INFO" "Generated request file: ${SNAP_REQUEST}"
-    # report activity in the log
-    ciop-log "INFO" "Invoking SNAP-gpt on the generated request file for statistics extraction from Sigma Diff product"
-    # invoke the ESA SNAP toolbox
-    gpt $SNAP_REQUEST -c "${CACHE_SIZE}" &> /dev/null
-    # check the exit code
-    [ $? -eq 0 ] || return $ERR_SNAP
-    #Output name of customized colorbar legend
-    sigmaDiffColorbarOutput=${sigmaDiffName}_legend.png
-    sigmaDiffColorbarBasename=$(basename "${sigmaDiffColorbarOutput}")
-    # colorbar description
-    colorbarDescription="Sigma_0 Difference [dB]"
-    #Customize colorbar with product statistics
-    retVal=$(colorbarCreator "${colorbarInput}" "${colorbarDescription}" "${statsFile}" "${sigmaDiffColorbarOutput}" )
-    rm ${statsFile} 
-    rm ${TMPDIR}/temp-outputfile.png
-    rm ${pconvertOutRgbCompositeTIF} ${pconvertOutTIF}
+    retVal=$(colorbarCreatorRGB "${colorbarInput}" "${colorbarDescription}" "${min_val}" "${max_val}" "${min_val}" "${max_val}" "${min_val}" "${max_val}" "${sigmaMasterSlaveCompositeColorbarOutput}" )
 
     # get timing info for the tif properties file
     dateStart_s=$(date -d "${dateMaster}" +%s)
@@ -1623,81 +1853,46 @@ function main() {
 
     # report activity in the log
     ciop-log "INFO" "Creating properties files"
-    #create .properties file for composite RGB png quick-look
-    description="Quick Look product for Coherence and Intensity RGB combination. Red=Coherence, Green=Intensity average in dB, Blue=Intensity difference in dB"
-    outCombinedRGB_properties=$( propertiesFileCratorPNG_IFG "${coherenceName_QL_TIF}" "${OUTPUTDIR}/${combinedRGB}.png" "${description}" "${dateMaster}" "${dateSlave}" "${dateDiff_days}" "${polarisation}" "${SNAP_VERSION}" "${processingTime}" )
-    # report activity in the log
-    ciop-log "DEBUG" "Composite Coh, Sigma Avg, Sigma Diff RGB properties file created: ${outCombinedRGB_properties}"
-    #create .properties file for composite sigma master sigam slave RGB png quick-look
-    description="Quick Look product of Sigma Master, Sigma Slave, Sigma Slave RGB combination. Red=Sigma Master in dB, Green=Sigma Slave in dB, Blue=Sigma Slave in dB"
-    outSigmaMasterSlaveCompositeRGB_properties=$( propertiesFileCratorPNG_IFG "${sigmaMasterName_QL_TIF}" "${OUTPUTDIR}/${sigmaMasterSlaveCompositeRGB}.png" "${description}" "${dateMaster}" "${dateSlave}" "${dateDiff_days}" "${polarisation}" "${SNAP_VERSION}" "${processingTime}" )
-    # report activity in the log
-    ciop-log "DEBUG" "Composite Sigma Master, Sigma Slave, Sigma Slave RGB properties file created: ${outSigmaMasterSlaveCompositeRGB_properties}"
-    #create .properties file for sigma master png quick-look
-    description="Quick Look product of Intensity in dB of the Master product"
-    outSigmaMaster_properties=$( propertiesFileCratorPNG_OneBand "${sigmaMasterName_QL_TIF}" "${OUTPUTDIR}/${sigmaMasterBasename_QL}.png" "${description}" "${dateMaster}" "${polarisation}" "${SNAP_VERSION}" "${processingTime}" "${sigmaMasterColorbarBasename}" )
-    # report activity in the log
-    ciop-log "DEBUG" "Sigma Master properties file created: ${outSigmaMaster_properties}"
-    #create .properties file for sigma slave png quick-look
-    description="Quick Look product of Intensity in dB of the Slave product"
-    outSigmaSlave_properties=$( propertiesFileCratorPNG_OneBand "${sigmaSlaveName_QL_TIF}" "${OUTPUTDIR}/${sigmaSlaveBasename_QL}.png" "${description}" "${dateSlave}" "${polarisation}" "${SNAP_VERSION}" "${processingTime}" "${sigmaSlaveColorbarBasename}" )
-    # report activity in the log
-    ciop-log "DEBUG" "Sigma Slave properties file created: ${outSigmaSlave_properties}"
-    #create .properties file for coherence png quick-look
-    description="Quick Look product of Coherence product computed on the input SLC couple"
-    outCoh_properties=$( propertiesFileCratorPNG_IFG "${coherenceName_QL_TIF}" "${OUTPUTDIR}/${coherenceBasename_QL}.png" "${description}" "${dateMaster}" "${dateSlave}" "${dateDiff_days}" "${polarisation}" "${SNAP_VERSION}" "${processingTime}" "${coherenceColorbarBasename}" )
-    # report activity in the log
-    ciop-log "DEBUG" "Coherence properties file created: ${outCoh_properties}"
-    #create .properties file for sigma average png quick-look
-    description="Quick Look product of Intensity average in dB computed on the input SLC couple"
-    outSigmaAverage_properties=$( propertiesFileCratorPNG_IFG "${sigmaAverageName_QL_TIF}" "${OUTPUTDIR}/${sigmaAverageBasename_QL}.png" "${description}" "${dateMaster}" "${dateSlave}" "${dateDiff_days}" "${polarisation}" "${SNAP_VERSION}" "${processingTime}" "${sigmaAverageColorbarBasename}" )
-    # report activity in the log
-    ciop-log "DEBUG" "Sigma average properties file created: ${outSigmaAverage_properties}"
-    #create .properties file for sigma difference png quick-look
-    description="Quick Look product of Intensity difference in dB computed on the input SLC couple"
-    outSigmaDiff_properties=$( propertiesFileCratorPNG_IFG "${sigmaDiffName_QL_TIF}" "${OUTPUTDIR}/${sigmaDiffBasename_QL}.png" "${description}" "${dateMaster}" "${dateSlave}" "${dateDiff_days}" "${polarisation}" "${SNAP_VERSION}" "${processingTime}" "${sigmaDiffColorbarBasename}" )
-    # report activity in the log
-    ciop-log "DEBUG" "Sigma difference properties file created: ${outSigmaDiff_properties}"
 
     # create properties file for coherence tif product
-    descriptionCoh="Coherence product computed on the input SLC couple"
-    outputCohTIF_properties=$( propertiesFileCratorTIF_IFG "${coherenceName_TIF}" "${descriptionCoh}" "${dateMaster}" "${dateSlave}" "${dateDiff_days}" "${polarisation}" "${pixelSpacing}" "${SNAP_VERSION}" "${processingTime}" )
+    descriptionCoh="Coherence computed on input SLC couple"
+    outputCohTIF_properties=$( propertiesFileCratorTIF_IFG "${coherenceName}" "${descriptionCoh}" "${dateMaster}" "${dateSlave}" "${dateDiff_days}" "${polarisation}" "${pixelSpacing}" "${SNAP_VERSION}" "${processingTime}" )
     # report activity in the log
     ciop-log "DEBUG" "Coherence properties file created: ${outputCohTIF_properties}"
 
     # create properties file for Intensity average tif product
-    descriptionSigmaAverage="Intensity average in dB computed on the input SLC couple"
-    outputSigmaAverageTIF_properties=$( propertiesFileCratorTIF_IFG "${sigmaAverageName_TIF}" "${descriptionSigmaAverage}" "${dateMaster}" "${dateSlave}" "${dateDiff_days}" "${polarisation}" "${pixelSpacing}" "${SNAP_VERSION}" "${processingTime}" )
+    descriptionSigmaAverage="Intensity average in dB of input SLC couple"
+    outputSigmaAverageTIF_properties=$( propertiesFileCratorTIF_IFG "${sigmaAverageName}" "${descriptionSigmaAverage}" "${dateMaster}" "${dateSlave}" "${dateDiff_days}" "${polarisation}" "${pixelSpacing}" "${SNAP_VERSION}" "${processingTime}" )
     # report activity in the log
     ciop-log "DEBUG" "Backscatter average properties file created: ${outputSigmaAverageTIF_properties}"
 
     # create properties file for Intensity difference average tif product
-    descriptionSigmaDiff="Intensity difference in dB computed on the input SLC couple"
-    outputSigmaDiffTIF_properties=$( propertiesFileCratorTIF_IFG "${sigmaDiffName_TIF}" "${descriptionSigmaDiff}" "${dateMaster}" "${dateSlave}" "${dateDiff_days}" "${polarisation}" "${pixelSpacing}" "${SNAP_VERSION}" "${processingTime}" )
+    descriptionSigmaDiff="Intensity difference in dB of input SLC couple"
+    outputSigmaDiffTIF_properties=$( propertiesFileCratorTIF_IFG "${sigmaDiffName}" "${descriptionSigmaDiff}" "${dateMaster}" "${dateSlave}" "${dateDiff_days}" "${polarisation}" "${pixelSpacing}" "${SNAP_VERSION}" "${processingTime}" )
     # report activity in the log
     ciop-log "DEBUG" "Backscatter difference properties file created: ${outputSigmaDiffTIF_properties}"
 
     # create properties file for Intensity Master tif product
     descriptionSigmaMaster="Intensity in dB of the Master product"
-    outputSigmaMasterTIF_properties=$( propertiesFileCratorTIF_OneBand "${sigmaMasterName_TIF}" "${descriptionSigmaMaster}" "${dateMaster}" "${polarisation}" "${pixelSpacing}" "${SNAP_VERSION}" "${processingTime}" )
+    outputSigmaMasterTIF_properties=$( propertiesFileCratorTIF_OneBand "${sigmaMasterName}" "${descriptionSigmaMaster}" "${dateMaster}" "${polarisation}" "${pixelSpacing}" "${SNAP_VERSION}" "${processingTime}" )
     # report activity in the log
     ciop-log "DEBUG" "Master Backscatter properties file created: ${outputSigmaMasterTIF_properties}"
 
     # create properties file for Intensity Slave tif product
     descriptionSigmaSlave="Intensity in dB of the Slave product"
-    outputSigmaSlaveTIF_properties=$( propertiesFileCratorTIF_OneBand "${sigmaSlaveName_TIF}" "${descriptionSigmaSlave}" "${dateSlave}" "${polarisation}" "${pixelSpacing}" "${SNAP_VERSION}" "${processingTime}" )
+    outputSigmaSlaveTIF_properties=$( propertiesFileCratorTIF_OneBand "${sigmaSlaveName}" "${descriptionSigmaSlave}" "${dateSlave}" "${polarisation}" "${pixelSpacing}" "${SNAP_VERSION}" "${processingTime}" )
     # report activity in the log
     ciop-log "DEBUG" "Slave Backscatter properties file created: ${outputSigmaSlaveTIF_properties}"
 
     # create properties file for RGB composite tif product
-    descriptionRgbComposite="Coherence and Intensity RGB combination. Red=Coherence, Green=Intensity average in dB, Blue=Intensity difference in dB"
-    outputRgbCompositeNameTIF_properties=$( propertiesFileCratorTIF_IFG "${rgbCompositeNameTIF}" "${descriptionRgbComposite}" "${dateMaster}" "${dateSlave}" "${dateDiff_days}" "${polarisation}" "${pixelSpacing}" "${SNAP_VERSION}" "${processingTime}" )
+    descriptionRgbComposite="Coherence and Intensity RGB combination"
+    outputRgbCompositeNameTIF_properties=$( propertiesFileCratorTIF_IFG "${rgbCompositeName}" "${descriptionRgbComposite}" "${dateMaster}" "${dateSlave}" "${dateDiff_days}" "${polarisation}" "${pixelSpacing}" "${SNAP_VERSION}" "${processingTime}" )
     # report activity in the log
     ciop-log "DEBUG" "Combined RGB product properties file created: ${outputRgbCompositeNameTIF_properties}"    
 
     # create properties file for RGB composite tif product
-    descriptionRgbComposite="Sigma Master and Sigma Slave stack (Sigma_0 in dB)"
-    outputRgbCompositeNameTIF_properties=$( propertiesFileCratorTIF_IFG "${sigmaMasterSlaveCompositeTIF}" "${descriptionRgbComposite}" "${dateMaster}" "${dateSlave}" "${dateDiff_days}" "${polarisation}" "${pixelSpacing}" "${SNAP_VERSION}" "${processingTime}" )
+    descriptionRgbComposite="Sigma Master and Sigma Slave RGB combination"
+    outputRgbCompositeNameTIF_properties=$( propertiesFileCratorTIF_IFG "${sigmaMasterSlaveComposite}" "${descriptionRgbComposite}" "${dateMaster}" "${dateSlave}" "${dateDiff_days}" "${polarisation}" "${pixelSpacing}" "${SNAP_VERSION}" "${processingTime}" )
     # report activity in the log
     ciop-log "DEBUG" "Combined RGB product properties file created: ${outputRgbCompositeNameTIF_properties}"
 
@@ -1723,7 +1918,6 @@ export OUTPUTDIR=${TMPDIR}/output
 mkdir -p ${TMPDIR}/input
 export INPUTDIR=${TMPDIR}/input
 export DEBUG=0
-export QL_BRANCH=0
 
 declare -a inputfiles
 
