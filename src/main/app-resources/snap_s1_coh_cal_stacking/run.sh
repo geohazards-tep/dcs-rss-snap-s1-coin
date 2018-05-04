@@ -463,17 +463,17 @@ function create_snap_sigmaAvrgDiff_bandExtract(){
   <node id="BandMaths">
     <operator>BandMaths</operator>
     <sources>
-      <sourceProduct refid="LinearToFromdB"/>
+      <sourceProduct refid="Read"/>
     </sources>
     <parameters class="com.bc.ceres.binding.dom.XppDomElement">
       <targetBands>
         <targetBand>
           <name>sigmaDiff</name>
           <type>float32</type>
-          <expression>${sigmaMasterBand}_db - ${sigmaSlaveBand}_db</expression>
+          <expression>if (!nan(${coherenceBand})) then (10*log10(${sigmaMasterBand}) - 10*log10(${sigmaSlaveBand})) else NaN</expression>
           <description/>
           <unit/>
-          <noDataValue>0.0</noDataValue>
+          <noDataValue>NaN</noDataValue>
         </targetBand>
       </targetBands>
       <variables/>
@@ -482,17 +482,17 @@ function create_snap_sigmaAvrgDiff_bandExtract(){
   <node id="BandMaths(2)">
     <operator>BandMaths</operator>
     <sources>
-      <sourceProduct refid="LinearToFromdB"/>
+      <sourceProduct refid="Read"/>
     </sources>
     <parameters class="com.bc.ceres.binding.dom.XppDomElement">
       <targetBands>
         <targetBand>
           <name>sigmaAverage</name>
           <type>float32</type>
-          <expression>(${sigmaMasterBand}_db + ${sigmaSlaveBand}_db) / 2</expression>
+          <expression>if (!nan(${coherenceBand})) then ((10*log10(${sigmaMasterBand}) + 10*log10(${sigmaSlaveBand})) / 2) else NaN</expression>
           <description/>
           <unit/>
-          <noDataValue>0.0</noDataValue>
+          <noDataValue>NaN</noDataValue>
         </targetBand>
       </targetBands>
       <variables/>
@@ -1670,7 +1670,7 @@ function main() {
 #Fri Mar 23 16:46:55 CET 2018
 blue=0
 name=coh_sigmaAvg_null
-green=if fneq(sigmaAverage,0) then max(min(floor(sigmaAverage*12.7+191.5),255),1) else 0
+green=if fneq(${coherenceBand},0) then max(min(floor(sigmaAverage*12.7+191.5),255),1) else 0
 red=if fneq(${coherenceBand},0) then max(min(floor(${coherenceBand}*256.565656566-1.56565656566),255),1) else 0
 EOF
     # Full Resolution product 8 bit encoded 
