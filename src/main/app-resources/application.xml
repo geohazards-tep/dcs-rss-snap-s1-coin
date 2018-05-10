@@ -46,8 +46,8 @@
          <parameter id="demtype" title="DEM type" abstract="Define the DEM source for the Back-Geocoding Coregistration and Terrain Correction processing. NOTE: SRTM valid in the [-56 deg,+60 deg] range of latitudes." scope="runtime" maxOccurs="1">
 		<options>
                         <option>SRTM 3Sec</option>
-			<!-- <option>SRTM 1Sec HGT</option>
                         <option>GETASSE30</option>
+			<!-- <option>SRTM 1Sec HGT</option>
                         <option>ACE30</option>
                         <option>ACE2_5Min</option> -->
 			<default>SRTM 3Sec</default>
@@ -64,11 +64,11 @@
          <parameter id="nAzLooks" title="Azimuth Multilook factor" abstract="Define the multilook factor applied for Azimuth direction in the Multilooking processing [integer]" scope="runtime" maxOccurs="1">2</parameter>
          <parameter id="nRgLooks" title="Range Multilook factor" abstract="Define the multilook factor applied for Range direction in the Multilooking processing [integer]" scope="runtime" maxOccurs="1">8</parameter>
          <parameter id="pixelSpacingInMeter" title="Pixel spacing in meters" abstract="Define the pixel spacing for the Terrain-Correction processing [meters]" scope="runtime" maxOccurs="1">30.0</parameter>
-         <parameter id="demtype" title="DEM type" abstract="Define the DEM source for the Back-Geocoding Coregistration and Terrain Correction processing. NOTE: SRTM valid in the [-56 deg,+60 deg] range of latitudes." scope="test" maxOccurs="1">
+         <parameter id="demtype" title="DEM type" abstract="Define the DEM source for the Back-Geocoding Coregistration and Terrain Correction processing. NOTE: SRTM valid in the [-56 deg,+60 deg] range of latitudes." scope="runtime" maxOccurs="1">
                 <options>
                         <option>SRTM 3Sec</option>
-                        <!-- <option>SRTM 1Sec HGT</option>
                         <option>GETASSE30</option>
+                        <!-- <option>SRTM 1Sec HGT</option>
                         <option>ACE30</option>
                         <option>ACE2_5Min</option> -->
                         <default>SRTM 3Sec</default>
