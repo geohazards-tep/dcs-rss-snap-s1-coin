@@ -11,7 +11,7 @@
     <version>2.0.0</version>
   </parent>
   <description>SNAP COherence and INtensity (COIN) chain for GEP</description>
-  <version>1.4.9-SNAPSHOT</version>
+  <version>1.4.9</version>
   <properties>
     <summary>SNAP COherence and INtensity (COIN) chain for GEP</summary>
     <description>SNAP COherence and INtensity (COIN) chain for GEP</description>
