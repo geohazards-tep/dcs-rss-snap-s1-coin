@@ -6,6 +6,11 @@ source ${ciop_job_include}
 # set the environment variables to use ESA SNAP toolbox
 source $_CIOP_APPLICATION_PATH/gpt/snap_include.sh
 
+## put /opt/anaconda/bin ahead to the PATH list to ensure gdal to point to the anaconda installation dir
+export PATH=/opt/anaconda/bin:${PATH}
+
+
+
 # define the exit codes
 SUCCESS=0
 ERR_NODATA=1
@@ -1246,6 +1251,153 @@ EOF
 
 }
 
+function create_snap_visualization_bands_coh_sigma(){
+#function call create_snap_visualization_bands_coh_sigma 
+
+# Get number of input
+inputNum=$#
+# check on number of inputs
+if [ "$inputNum" -ne "5" ] ; then
+    return ${SNAP_REQUEST_ERROR}
+fi
+
+local rgbcomposite=$1
+local green_output=$2
+local blue_output=$3
+local coherence_band=$4
+local red_output=$5
+#sets the output filename
+snap_request_filename="${TMPDIR}/$( uuidgen ).xml"
+
+cat << EOF > ${snap_request_filename}
+<graph id="Graph">
+  <version>1.0</version>
+  <node id="Read">
+    <operator>Read</operator>
+    <sources/>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <file>${rgbcomposite}</file>
+    </parameters>
+  </node>
+  <node id="Write(2)">
+    <operator>Write</operator>
+    <sources>
+      <sourceProduct refid="BandMaths(2)"/>
+    </sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <file>${green_output}</file>
+      <formatName>GeoTIFF-BigTIFF</formatName>
+    </parameters>
+  </node>
+  <node id="Write(3)">
+    <operator>Write</operator>
+    <sources>
+      <sourceProduct refid="BandMaths(3)"/>
+    </sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <file>${blue_output}</file>
+      <formatName>GeoTIFF-BigTIFF</formatName>
+    </parameters>
+  </node>
+  <node id="BandMaths">
+    <operator>BandMaths</operator>
+    <sources>
+      <sourceProduct refid="Read"/>
+    </sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <targetBands>
+        <targetBand>
+          <name>Red</name>
+          <type>uint8</type>
+          <expression>if fneq(${coherence_band},0) then max(min(floor(${coherence_band}*256.565656566-1.56565656566),255),1) else 0</expression>
+          <description/>
+          <unit/>
+          <noDataValue>0.0</noDataValue>
+        </targetBand>
+      </targetBands>
+      <variables/>
+    </parameters>
+  </node>
+  <node id="BandMaths(2)">
+    <operator>BandMaths</operator>
+    <sources>
+      <sourceProduct refid="Read"/>
+    </sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <targetBands>
+        <targetBand>
+          <name>Green</name>
+          <type>uint8</type>
+          <expression>if fneq(${coherence_band},0) then max(min(floor(sigmaAverage*12.7+191.5),255),1) else 0</expression>
+          <description/>
+          <unit/>
+          <noDataValue>0.0</noDataValue>
+        </targetBand>
+      </targetBands>
+      <variables/>
+    </parameters>
+  </node>
+  <node id="BandMaths(3)">
+    <operator>BandMaths</operator>
+    <sources>
+      <sourceProduct refid="Read"/>
+    </sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <targetBands>
+        <targetBand>
+          <name>Blue</name>
+          <type>uint8</type>
+          <expression>sigmaAverage==0</expression>
+          <description/>
+          <unit/>
+          <noDataValue>0.0</noDataValue>
+        </targetBand>
+      </targetBands>
+      <variables/>
+    </parameters>
+  </node>
+  <node id="Write">
+    <operator>Write</operator>
+    <sources>
+      <sourceProduct refid="BandMaths"/>
+    </sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <file>${red_output}</file>
+      <formatName>GeoTIFF-BigTIFF</formatName>
+    </parameters>
+  </node>
+  <applicationData id="Presentation">
+    <Description/>
+    <node id="Read">
+            <displayPosition x="37.0" y="134.0"/>
+    </node>
+    <node id="Write(2)">
+      <displayPosition x="452.0" y="138.0"/>
+    </node>
+    <node id="Write(3)">
+      <displayPosition x="458.0" y="224.0"/>
+    </node>
+    <node id="BandMaths">
+      <displayPosition x="223.0" y="51.0"/>
+    </node>
+    <node id="BandMaths(2)">
+      <displayPosition x="215.0" y="128.0"/>
+    </node>
+    <node id="BandMaths(3)">
+      <displayPosition x="244.0" y="233.0"/>
+    </node>
+    <node id="Write">
+            <displayPosition x="460.0" y="60.0"/>
+    </node>
+  </applicationData>
+</graph>
+EOF
+[ $? -eq 0 ] && {
+    echo "${snap_request_filename}"
+    return 0
+    } || return ${SNAP_REQUEST_ERROR}
+
+}
 
 function create_snap_sigmaMasterSlave_clip(){
 #function call create_snap_sigmaMasterSlave_clip  "${sigmaMasterSlaveCompositeTIF}" "${sigmaMasterBand}_db" "${sigmaSlaveBand}_db" "${min_val}" "${max_val}" "${sigmaMasterSlaveCompositeClip_TIF}" 
@@ -1657,14 +1809,16 @@ function main() {
     sigmaAverageName_TIF=${sigmaAverageName}.tif
     # sigma difference product
     sigmaDiffName_TIF=${sigmaDiffName}.tif
+    if (( "${pixelSpacingInMeter}" >= "30" )); then
+		### FULL RESOLUTION PRODUCTS GENERATION
+		# report activity in the log
+		ciop-log "INFO" "Pixel spacing is: {pixelSpacingInMeter}, its >= 30 meter, therefore chosen for pconvert method of creating visualization products."
 
-    ### FULL RESOLUTION PRODUCTS GENERATION
-    # report activity in the log
-    ciop-log "INFO" "Creating full resolution visualization products"
-    ## Create RGB composite R=coherence G=sigmaAverage B=null
-    rgbCompositeNameTIF=${rgbCompositeName}.tif
-    # edit on the fly the RGB image profile file that will be applied by pconvert
-    cat << EOF > ${TMPDIR}/coh_sigmaAvg_null.rgb
+		ciop-log "INFO" "Creating full resolution visualization products"
+		## Create RGB composite R=coherence G=sigmaAverage B=null
+		rgbCompositeNameTIF=${rgbCompositeName}.tif
+		# edit on the fly the RGB image profile file that will be applied by pconvert
+		cat << EOF > ${TMPDIR}/coh_sigmaAvg_null.rgb
 #RGB-Image Profile
 #Fri Mar 23 16:46:55 CET 2018
 blue=0
@@ -1672,249 +1826,533 @@ name=coh_sigmaAvg_null
 green=if fneq(${coherenceBand},0) then max(min(floor(sigmaAverage*12.7+191.5),255),1) else 0
 red=if fneq(${coherenceBand},0) then max(min(floor(${coherenceBand}*256.565656566-1.56565656566),255),1) else 0
 EOF
-    # Full Resolution product 8 bit encoded 
-    rgbCompositeNameFullResTIF=${rgbCompositeName}.rgb.tif
-    pconvert -f tif -p ${TMPDIR}/coh_sigmaAvg_null.rgb -s 0,0 -o ${TMPDIR} ${rgbCompositeNameTIF} &> /dev/null
-    # check the exit code
-    [ $? -eq 0 ] || return $ERR_PCONVERT
-    # output of pconvert
-    pconvertOutRgbCompositeTIF=${TMPDIR}/${rgbCompositeBasename}.tif
-    # remove corrupted alpha band through gdal_translate
-    gdal_translate -ot Byte -of GTiff -b 1 -b 2 -b 3 -co "TILED=YES" -co "BLOCKXSIZE=512" -co "BLOCKYSIZE=512" -co "PHOTOMETRIC=RGB" ${pconvertOutRgbCompositeTIF} temp-outputfile.tif
-    returnCode=$?
-    [ $returnCode -eq 0 ] || return ${ERR_CONVERT}
-    # reprojection
-    gdalwarp -ot Byte -t_srs EPSG:3857 -srcnodata 0 -dstnodata 0 -dstalpha -co "TILED=YES" -co "BLOCKXSIZE=512" -co "BLOCKYSIZE=512" -co "PHOTOMETRIC=RGB" -co "ALPHA=YES" temp-outputfile.tif ${rgbCompositeNameFullResTIF}
-    returnCode=$?
-    [ $returnCode -eq 0 ] || return ${ERR_CONVERT}
-    # Add overviews
-    gdaladdo -r average ${rgbCompositeNameFullResTIF} 2 4 8 16
-    returnCode=$?
-    [ $returnCode -eq 0 ] || return ${ERR_CONVERT}
-    rm ${pconvertOutRgbCompositeTIF} temp-outputfile.tif
-    # PNG output
-    rgbCompositeNameFullResPNG=${rgbCompositeName}.png
-    pconvert -f png -p ${TMPDIR}/coh_sigmaAvg_null.rgb -s 0,0 -o ${TMPDIR} ${rgbCompositeNameTIF} &> /dev/null
-    # check the exit code
-    [ $? -eq 0 ] || return $ERR_PCONVERT
-    # output of pconvert
-    pconvertOutRgbCompositePNG=${TMPDIR}/${rgbCompositeBasename}.png
-    # remove black background
-    convert ${pconvertOutRgbCompositePNG} -alpha set -channel RGBA -fill none -opaque black ${rgbCompositeNameFullResPNG}
-    rm ${pconvertOutRgbCompositePNG}
-    # remove physical product
-    rm ${rgbCompositeNameTIF}
-    # visualization product is the unique generated output for the RGB combination
-    mv ${rgbCompositeNameFullResTIF} ${rgbCompositeNameTIF}
-    # Colorbar legend to be published 
-    colorbarInput=$_CIOP_APPLICATION_PATH/gpt/coh_sigmaAvg_null_colormap.png
-    # Output name of customized colorbar legend
-    rgbCompositeColorbarOutput=${rgbCompositeName}.tif.legend.png
-    cp ${colorbarInput} ${rgbCompositeColorbarOutput}
-    ## Full resolution image creation for Sigma Master product
-    # Visualization product name
-    sigmaMasterNameFullResTIF=${sigmaMasterName}.rgb.tif
-    # Source band name 
-    sourceBand=${sigmaMasterBand}_db
-    # define min max values in dB for sigma visualization
-    min_val=-15
-    max_val=5
-    # call function for visualization product generator 
-    min_max_val=$( visualization_product_creator_one_band "${sigmaMasterName_TIF}" "${sourceBand}" "${min_val}" "${max_val}" "${sigmaMasterNameFullResTIF}" )
-    retCode=$?
-    [ $DEBUG -eq 1 ] && echo min_max_val $min_max_val
-    [ $retCode -eq 0 ] || return $retCode
-    # Colorbar legend to be customized with product statistics
-    colorbarInput=$_CIOP_APPLICATION_PATH/gpt/colorbar_gray.png #sample Gray Colorbar (as used by pconvert with single band products) colorbar image
-    # Output name of customized colorbar legend
-    sigmaMasterColorbarOutput=${sigmaMasterName}.tif.legend.png
-    # colorbar description
-    colorbarDescription="Sigma_0 Master [dB]"
-    #Customize colorbar with product statistics
-    retVal=$(colorbarCreator "${colorbarInput}" "${colorbarDescription}" ${min_max_val} "${sigmaMasterColorbarOutput}" )
-    ## Full resolution image creation for Sigma Slave product
-    # Visualization product name
-    sigmaSlaveNameFullResTIF=${sigmaSlaveName}.rgb.tif
-    # Source band name
-    sourceBand=${sigmaSlaveBand}_db
-    # call function for visualization product generator
-    min_max_val=$( visualization_product_creator_one_band "${sigmaSlaveName_TIF}" "${sourceBand}" "${min_val}" "${max_val}" "${sigmaSlaveNameFullResTIF}" )
-    retCode=$?
-    [ $DEBUG -eq 1 ] && echo min_max_val $min_max_val
-    [ $retCode -eq 0 ] || return $retCode
-    # Output name of customized colorbar legend
-    sigmaSlaveColorbarOutput=${sigmaSlaveName}.tif.legend.png
-    # colorbar description
-    colorbarDescription="Sigma_0 Slave [dB]"
-    # Customize colorbar with product statistics
-    retVal=$(colorbarCreator "${colorbarInput}" "${colorbarDescription}" ${min_max_val} "${sigmaSlaveColorbarOutput}" )
-    ## Full resolution image creation for Coeherence product
-    # Visualization product name
-    coherenceNameFullResTIF=${coherenceName}.rgb.tif
-    # Build source band name for statistics computation
-    sourceBand=${coherenceBand}
-    # define percentiles min max values for coherence visualization
-    min_val="pc2"
-    max_val="pc96"
-    # call function for visualization product generator
-    min_max_val=$( visualization_product_creator_one_band "${coherenceName_TIF}" "${sourceBand}" "${min_val}" "${max_val}" "${coherenceNameFullResTIF}" )
-    retCode=$?
-    [ $DEBUG -eq 1 ] && echo min_max_val $min_max_val
-    [ $retCode -eq 0 ] || return $retCode
-    # Colorbar legend to be customized with product statistics
-    colorbarInput=$_CIOP_APPLICATION_PATH/gpt/colorbar_gray.png #sample Gray Colorbar (as used by pconvert with single band products) colorbar image
-    # Output name of customized colorbar legend
-    coherenceColorbarOutput=${coherenceName}.tif.legend.png
-    # colorbar description
-    colorbarDescription="Coherence"
-    # Customize colorbar with product statistics
-    retVal=$(colorbarCreator "${colorbarInput}" "${colorbarDescription}" ${min_max_val} "${coherenceColorbarOutput}" )
-    ## Full resolution image creation for Sigma Average product
-    # Visualization product name
-    sigmaAverageNameFullResTIF=${sigmaAverageName}.rgb.tif
-    # Build source band name for statistics computation
-    sourceBand="sigmaAverage"
-    # define min max values for sigma average visualization
-    min_val=-15
-    max_val=5
-    # call function for visualization product generator
-    min_max_val=$( visualization_product_creator_one_band "${sigmaAverageName_TIF}" "${sourceBand}" "${min_val}" "${max_val}" "${sigmaAverageNameFullResTIF}" )
-    retCode=$?
-    [ $DEBUG -eq 1 ] && echo min_max_val $min_max_val
-    [ $retCode -eq 0 ] || return $retCode
-    # Colorbar legend to be customized with product statistics
-    colorbarInput=$_CIOP_APPLICATION_PATH/gpt/colorbar_gray.png #sample Gray Colorbar (as used by pconvert with single band products) colorbar image
-    # Output name of customized colorbar legend
-    sigmaAverageColorbarOutput=${sigmaAverageName}.tif.legend.png
-    # colorbar description
-    colorbarDescription="Sigma_0 Average [dB]"
-    #Customize colorbar with product statistics
-    retVal=$(colorbarCreator "${colorbarInput}" "${colorbarDescription}" ${min_max_val} "${sigmaAverageColorbarOutput}" )
-    ## Full resolution image creation for Sigma Difference product
-    # Visualization product name
-    sigmaDiffNameFullResTIF=${sigmaDiffName}.rgb.tif
-    # Build source band name for statistics computation
-    sourceBand="sigmaDiff"
-    # define min max percebtiles values for sigma average visualization
-    min_val="pc2"
-    max_val="pc96"
-    # call function for visualization product generator
-    min_max_val=$( visualization_product_creator_one_band "${sigmaDiffName_TIF}" "${sourceBand}" "${min_val}" "${max_val}" "${sigmaDiffNameFullResTIF}" )
-    retCode=$?
-    [ $DEBUG -eq 1 ] && echo min_max_val $min_max_val
-    [ $retCode -eq 0 ] || return $retCode
-    # Colorbar legend to be customized with product statistics
-    colorbarInput=$_CIOP_APPLICATION_PATH/gpt/colorbar_gray.png #sample Gray Colorbar (as used by pconvert with single band products) colorbar image
-    # Output name of customized colorbar legend
-    sigmaDiffColorbarOutput=${sigmaDiffName}.tif.legend.png
-    # colorbar description
-    colorbarDescription="Sigma_0 Difference [dB]"
-    # Customize colorbar with product statistics
-    retVal=$(colorbarCreator "${colorbarInput}" "${colorbarDescription}" ${min_max_val} "${sigmaDiffColorbarOutput}" )
-    ## Create RGB composite R=sigma master G=sigma slave B=sigma slave
-    sigmaMasterSlaveCompositeTIF=${sigmaMasterSlaveComposite}.tif
-    sigmaMasterSlaveCompositeClip_TIF=${sigmaMasterSlaveComposite}_clip.tif
-    # Clip values between -15 and +5 dB 
-    # report activity in the log
-    ciop-log "INFO" "Preparing SNAP request file to clip Backscatter master and slave values"
-    min_val=-15
-    max_val=5
-    # prepare the SNAP request
-    SNAP_REQUEST=$( create_snap_sigmaMasterSlave_clip "${sigmaMasterSlaveCompositeTIF}" "${sigmaMasterBand}_db" "${sigmaSlaveBand}_db" "${min_val}" "${max_val}" "${sigmaMasterSlaveCompositeClip_TIF}" )
-    [ $? -eq 0 ] || return ${SNAP_REQUEST_ERROR}
-    [ $DEBUG -eq 1 ] && cat ${SNAP_REQUEST}
-    # report activity in the log
-    ciop-log "INFO" "Generated request file: ${SNAP_REQUEST}"
-    # report activity in the log
-    ciop-log "INFO" "Invoking SNAP-gpt on the generated request file clip Backscatter master and slave values"
-    # invoke the ESA SNAP toolbox
-    gpt $SNAP_REQUEST -c "${CACHE_SIZE}" &> /dev/null
-    # check the exit code
-    [ $? -eq 0 ] || return $ERR_SNAP
-    # Full Resolution product 8 bit encoded
-    # The output for the RGB combination is a couple of visualization products
-    # - A GeoTiff to be displayed on the map
-    # - A PNG file  
-    rm ${sigmaMasterSlaveCompositeTIF}
-    sigmaMasterSlaveCompositeFullResTIF=${sigmaMasterSlaveCompositeTIF}
-    pconvert -b 2,1,1 -s 0,0 -f tif -o ${TMPDIR} ${sigmaMasterSlaveCompositeClip_TIF} &> /dev/null
-    # PNG creation
-    pconvert -b 2,1,1 -s 0,0 -f png -o ${TMPDIR} ${sigmaMasterSlaveCompositeClip_TIF} &> /dev/null
-    # check the exit code
-    [ $? -eq 0 ] || return $ERR_PCONVERT
-    # output of pconvert
-    pconvertOutTIF=${TMPDIR}/${sigmaMasterSlaveCompositeBasename}_clip.tif
-    # output of pconvert
-    pconvertOutPNG=${TMPDIR}/${sigmaMasterSlaveCompositeBasename}_clip.png 
-    sigmaMasterSlaveCompositeFullResPNG=${sigmaMasterSlaveComposite}.png
-    mv ${pconvertOutPNG} ${sigmaMasterSlaveCompositeFullResPNG}
-    # reprojection
-    gdalwarp -ot Byte -t_srs EPSG:3857 -srcalpha -dstalpha -co "TILED=YES" -co "BLOCKXSIZE=512" -co "BLOCKYSIZE=512" -co "PHOTOMETRIC=RGB" -co "ALPHA=YES" ${pconvertOutTIF} ${sigmaMasterSlaveCompositeFullResTIF}
-    #Add overviews
-    gdaladdo -r average ${sigmaMasterSlaveCompositeFullResTIF} 2 4 8 16
-    returnCode=$?
-    [ $returnCode -eq 0 ] || return ${ERR_CONVERT}
-    rm ${pconvertOutTIF} ${sigmaMasterSlaveCompositeClip_TIF}
-    # Colorbar legend to be customized with product statistics
-    colorbarInput=$_CIOP_APPLICATION_PATH/gpt/rgb_cube_sigmaS_sigmaM_sigmaM.png # RGB cube
-    # Output name of customized colorbar legend
-    sigmaMasterSlaveCompositeColorbarOutput=${sigmaMasterSlaveComposite}.tif.legend.png
-    # colorbar description
-    colorbarDescription="Amplitude Change RGB Composite"
-    #Customize colorbar with product statistics
-    retVal=$(colorbarCreatorRGB "${colorbarInput}" "${colorbarDescription}" "${min_val}" "${max_val}" "${min_val}" "${max_val}" "${min_val}" "${max_val}" "${sigmaMasterSlaveCompositeColorbarOutput}" )
+		# Full Resolution product 8 bit encoded 
+		rgbCompositeNameFullResTIF=${rgbCompositeName}.rgb.tif
+		pconvert -f tif -p ${TMPDIR}/coh_sigmaAvg_null.rgb -s 0,0 -o ${TMPDIR} ${rgbCompositeNameTIF} &> /dev/null
+		# check the exit code
+		[ $? -eq 0 ] || return $ERR_PCONVERT
+		# output of pconvert
+		pconvertOutRgbCompositeTIF=${TMPDIR}/${rgbCompositeBasename}.tif
+		# remove corrupted alpha band through gdal_translate
+		gdal_translate -ot Byte -of GTiff -b 1 -b 2 -b 3 -co "TILED=YES" -co "BLOCKXSIZE=512" -co "BLOCKYSIZE=512" -co "PHOTOMETRIC=RGB" ${pconvertOutRgbCompositeTIF} temp-outputfile.tif
+		returnCode=$?
+		[ $returnCode -eq 0 ] || return ${ERR_CONVERT}
+		# reprojection
+		gdalwarp -ot Byte -t_srs EPSG:3857 -srcnodata 0 -dstnodata 0 -dstalpha -co "TILED=YES" -co "BLOCKXSIZE=512" -co "BLOCKYSIZE=512" -co "PHOTOMETRIC=RGB" -co "ALPHA=YES" temp-outputfile.tif ${rgbCompositeNameFullResTIF}
+		returnCode=$?
+		[ $returnCode -eq 0 ] || return ${ERR_CONVERT}
+		# Add overviews
+		gdaladdo -r average ${rgbCompositeNameFullResTIF} 2 4 8 16
+		returnCode=$?
+		[ $returnCode -eq 0 ] || return ${ERR_CONVERT}
+		rm ${pconvertOutRgbCompositeTIF} temp-outputfile.tif
+		# PNG output
+		rgbCompositeNameFullResPNG=${rgbCompositeName}.png
+		pconvert -f png -p ${TMPDIR}/coh_sigmaAvg_null.rgb -s 0,0 -o ${TMPDIR} ${rgbCompositeNameTIF} &> /dev/null
+		# check the exit code
+		[ $? -eq 0 ] || return $ERR_PCONVERT
+		# output of pconvert
+		pconvertOutRgbCompositePNG=${TMPDIR}/${rgbCompositeBasename}.png
+		# remove black background
+		convert ${pconvertOutRgbCompositePNG} -alpha set -channel RGBA -fill none -opaque black ${rgbCompositeNameFullResPNG}
+		rm ${pconvertOutRgbCompositePNG}
+		# remove physical product
+		rm ${rgbCompositeNameTIF}
+		# visualization product is the unique generated output for the RGB combination
+		mv ${rgbCompositeNameFullResTIF} ${rgbCompositeNameTIF}
+		# Colorbar legend to be published 
+		colorbarInput=$_CIOP_APPLICATION_PATH/gpt/coh_sigmaAvg_null_colormap.png
+		# Output name of customized colorbar legend
+		rgbCompositeColorbarOutput=${rgbCompositeName}.tif.legend.png
+		cp ${colorbarInput} ${rgbCompositeColorbarOutput}
+		## Full resolution image creation for Sigma Master product
+		# Visualization product name
+		sigmaMasterNameFullResTIF=${sigmaMasterName}.rgb.tif
+		# Source band name 
+		sourceBand=${sigmaMasterBand}_db
+		# define min max values in dB for sigma visualization
+		min_val=-15
+		max_val=5
+		# call function for visualization product generator 
+		min_max_val=$( visualization_product_creator_one_band "${sigmaMasterName_TIF}" "${sourceBand}" "${min_val}" "${max_val}" "${sigmaMasterNameFullResTIF}" )
+		retCode=$?
+		[ $DEBUG -eq 1 ] && echo min_max_val $min_max_val
+		[ $retCode -eq 0 ] || return $retCode
+		# Colorbar legend to be customized with product statistics
+		colorbarInput=$_CIOP_APPLICATION_PATH/gpt/colorbar_gray.png #sample Gray Colorbar (as used by pconvert with single band products) colorbar image
+		# Output name of customized colorbar legend
+		sigmaMasterColorbarOutput=${sigmaMasterName}.tif.legend.png
+		# colorbar description
+		colorbarDescription="Sigma_0 Master [dB]"
+		#Customize colorbar with product statistics
+		retVal=$(colorbarCreator "${colorbarInput}" "${colorbarDescription}" ${min_max_val} "${sigmaMasterColorbarOutput}" )
+		## Full resolution image creation for Sigma Slave product
+		# Visualization product name
+		sigmaSlaveNameFullResTIF=${sigmaSlaveName}.rgb.tif
+		# Source band name
+		sourceBand=${sigmaSlaveBand}_db
+		# call function for visualization product generator
+		min_max_val=$( visualization_product_creator_one_band "${sigmaSlaveName_TIF}" "${sourceBand}" "${min_val}" "${max_val}" "${sigmaSlaveNameFullResTIF}" )
+		retCode=$?
+		[ $DEBUG -eq 1 ] && echo min_max_val $min_max_val
+		[ $retCode -eq 0 ] || return $retCode
+		# Output name of customized colorbar legend
+		sigmaSlaveColorbarOutput=${sigmaSlaveName}.tif.legend.png
+		# colorbar description
+		colorbarDescription="Sigma_0 Slave [dB]"
+		# Customize colorbar with product statistics
+		retVal=$(colorbarCreator "${colorbarInput}" "${colorbarDescription}" ${min_max_val} "${sigmaSlaveColorbarOutput}" )
+		## Full resolution image creation for Coeherence product
+		# Visualization product name
+		coherenceNameFullResTIF=${coherenceName}.rgb.tif
+		# Build source band name for statistics computation
+		sourceBand=${coherenceBand}
+		# define percentiles min max values for coherence visualization
+		min_val="pc2"
+		max_val="pc96"
+		# call function for visualization product generator
+		min_max_val=$( visualization_product_creator_one_band "${coherenceName_TIF}" "${sourceBand}" "${min_val}" "${max_val}" "${coherenceNameFullResTIF}" )
+		retCode=$?
+		[ $DEBUG -eq 1 ] && echo min_max_val $min_max_val
+		[ $retCode -eq 0 ] || return $retCode
+		# Colorbar legend to be customized with product statistics
+		colorbarInput=$_CIOP_APPLICATION_PATH/gpt/colorbar_gray.png #sample Gray Colorbar (as used by pconvert with single band products) colorbar image
+		# Output name of customized colorbar legend
+		coherenceColorbarOutput=${coherenceName}.tif.legend.png
+		# colorbar description
+		colorbarDescription="Coherence"
+		# Customize colorbar with product statistics
+		retVal=$(colorbarCreator "${colorbarInput}" "${colorbarDescription}" ${min_max_val} "${coherenceColorbarOutput}" )
+		## Full resolution image creation for Sigma Average product
+		# Visualization product name
+		sigmaAverageNameFullResTIF=${sigmaAverageName}.rgb.tif
+		# Build source band name for statistics computation
+		sourceBand="sigmaAverage"
+		# define min max values for sigma average visualization
+		min_val=-15
+		max_val=5
+		# call function for visualization product generator
+		min_max_val=$( visualization_product_creator_one_band "${sigmaAverageName_TIF}" "${sourceBand}" "${min_val}" "${max_val}" "${sigmaAverageNameFullResTIF}" )
+		retCode=$?
+		[ $DEBUG -eq 1 ] && echo min_max_val $min_max_val
+		[ $retCode -eq 0 ] || return $retCode
+		# Colorbar legend to be customized with product statistics
+		colorbarInput=$_CIOP_APPLICATION_PATH/gpt/colorbar_gray.png #sample Gray Colorbar (as used by pconvert with single band products) colorbar image
+		# Output name of customized colorbar legend
+		sigmaAverageColorbarOutput=${sigmaAverageName}.tif.legend.png
+		# colorbar description
+		colorbarDescription="Sigma_0 Average [dB]"
+		#Customize colorbar with product statistics
+		retVal=$(colorbarCreator "${colorbarInput}" "${colorbarDescription}" ${min_max_val} "${sigmaAverageColorbarOutput}" )
+		## Full resolution image creation for Sigma Difference product
+		# Visualization product name
+		sigmaDiffNameFullResTIF=${sigmaDiffName}.rgb.tif
+		# Build source band name for statistics computation
+		sourceBand="sigmaDiff"
+		# define min max percebtiles values for sigma average visualization
+		min_val="pc2"
+		max_val="pc96"
+		# call function for visualization product generator
+		min_max_val=$( visualization_product_creator_one_band "${sigmaDiffName_TIF}" "${sourceBand}" "${min_val}" "${max_val}" "${sigmaDiffNameFullResTIF}" )
+		retCode=$?
+		[ $DEBUG -eq 1 ] && echo min_max_val $min_max_val
+		[ $retCode -eq 0 ] || return $retCode
+		# Colorbar legend to be customized with product statistics
+		colorbarInput=$_CIOP_APPLICATION_PATH/gpt/colorbar_gray.png #sample Gray Colorbar (as used by pconvert with single band products) colorbar image
+		# Output name of customized colorbar legend
+		sigmaDiffColorbarOutput=${sigmaDiffName}.tif.legend.png
+		# colorbar description
+		colorbarDescription="Sigma_0 Difference [dB]"
+		# Customize colorbar with product statistics
+		retVal=$(colorbarCreator "${colorbarInput}" "${colorbarDescription}" ${min_max_val} "${sigmaDiffColorbarOutput}" )
+		## Create RGB composite R=sigma master G=sigma slave B=sigma slave
+		sigmaMasterSlaveCompositeTIF=${sigmaMasterSlaveComposite}.tif
+		sigmaMasterSlaveCompositeClip_TIF=${sigmaMasterSlaveComposite}_clip.tif
+		# Clip values between -15 and +5 dB 
+		# report activity in the log
+		ciop-log "INFO" "Preparing SNAP request file to clip Backscatter master and slave values"
+		min_val=-15
+		max_val=5
+		# prepare the SNAP request
+		SNAP_REQUEST=$( create_snap_sigmaMasterSlave_clip "${sigmaMasterSlaveCompositeTIF}" "${sigmaMasterBand}_db" "${sigmaSlaveBand}_db" "${min_val}" "${max_val}" "${sigmaMasterSlaveCompositeClip_TIF}" )
+		[ $? -eq 0 ] || return ${SNAP_REQUEST_ERROR}
+		[ $DEBUG -eq 1 ] && cat ${SNAP_REQUEST}
+		# report activity in the log
+		ciop-log "INFO" "Generated request file: ${SNAP_REQUEST}"
+		# report activity in the log
+		ciop-log "INFO" "Invoking SNAP-gpt on the generated request file clip Backscatter master and slave values"
+		# invoke the ESA SNAP toolbox
+		gpt $SNAP_REQUEST -c "${CACHE_SIZE}" &> /dev/null
+		# check the exit code
+		[ $? -eq 0 ] || return $ERR_SNAP
+		# Full Resolution product 8 bit encoded
+		# The output for the RGB combination is a couple of visualization products
+		# - A GeoTiff to be displayed on the map
+		# - A PNG file  
+		rm ${sigmaMasterSlaveCompositeTIF}
+		sigmaMasterSlaveCompositeFullResTIF=${sigmaMasterSlaveCompositeTIF}
+		pconvert -b 2,1,1 -s 0,0 -f tif -o ${TMPDIR} ${sigmaMasterSlaveCompositeClip_TIF} &> /dev/null
+		# PNG creation
+		pconvert -b 2,1,1 -s 0,0 -f png -o ${TMPDIR} ${sigmaMasterSlaveCompositeClip_TIF} &> /dev/null
+		# check the exit code
+		[ $? -eq 0 ] || return $ERR_PCONVERT
+		# output of pconvert
+		pconvertOutTIF=${TMPDIR}/${sigmaMasterSlaveCompositeBasename}_clip.tif
+		# output of pconvert
+		pconvertOutPNG=${TMPDIR}/${sigmaMasterSlaveCompositeBasename}_clip.png 
+		sigmaMasterSlaveCompositeFullResPNG=${sigmaMasterSlaveComposite}.png
+		mv ${pconvertOutPNG} ${sigmaMasterSlaveCompositeFullResPNG}
+		# reprojection
+		gdalwarp -ot Byte -t_srs EPSG:3857 -srcalpha -dstalpha -co "TILED=YES" -co "BLOCKXSIZE=512" -co "BLOCKYSIZE=512" -co "PHOTOMETRIC=RGB" -co "ALPHA=YES" ${pconvertOutTIF} ${sigmaMasterSlaveCompositeFullResTIF}
+		#Add overviews
+		gdaladdo -r average ${sigmaMasterSlaveCompositeFullResTIF} 2 4 8 16
+		returnCode=$?
+		[ $returnCode -eq 0 ] || return ${ERR_CONVERT}
+		rm ${pconvertOutTIF} ${sigmaMasterSlaveCompositeClip_TIF}
+		# Colorbar legend to be customized with product statistics
+		colorbarInput=$_CIOP_APPLICATION_PATH/gpt/rgb_cube_sigmaS_sigmaM_sigmaM.png # RGB cube
+		# Output name of customized colorbar legend
+		sigmaMasterSlaveCompositeColorbarOutput=${sigmaMasterSlaveComposite}.tif.legend.png
+		# colorbar description
+		colorbarDescription="Amplitude Change RGB Composite"
+		#Customize colorbar with product statistics
+		retVal=$(colorbarCreatorRGB "${colorbarInput}" "${colorbarDescription}" "${min_val}" "${max_val}" "${min_val}" "${max_val}" "${min_val}" "${max_val}" "${sigmaMasterSlaveCompositeColorbarOutput}" )
 
-    # get timing info for the tif properties file
-    dateStart_s=$(date -d "${dateMaster}" +%s)
-    dateStop_s=$(date -d "${dateSlave}" +%s)
-    dateDiff_s=$(echo "scale=0; $dateStop_s-$dateStart_s" | bc )
-    secondsPerDay="86400"
-    dateDiff_days=$(echo "scale=0; $dateDiff_s/$secondsPerDay" | bc )
-    pixelSpacing=${pixelSpacingInMeter}m
-    processingTime=$( date )
+		# get timing info for the tif properties file
+		dateStart_s=$(date -d "${dateMaster}" +%s)
+		dateStop_s=$(date -d "${dateSlave}" +%s)
+		dateDiff_s=$(echo "scale=0; $dateStop_s-$dateStart_s" | bc )
+		secondsPerDay="86400"
+		dateDiff_days=$(echo "scale=0; $dateDiff_s/$secondsPerDay" | bc )
+		pixelSpacing=${pixelSpacingInMeter}m
+		processingTime=$( date )
 
-    # report activity in the log
-    ciop-log "INFO" "Creating properties files"
-    # create properties file for coherence tif product
-    descriptionCoh="Coherence computed on input SLC couple"
-    outputCohTIF_properties=$( propertiesFileCratorTIF_IFG "${coherenceName}" "${descriptionCoh}" "${dateMaster}" "${dateSlave}" "${dateDiff_days}" "${polarisation}" "${pixelSpacing}" "${SNAP_VERSION}" "${processingTime}" )
-    # report activity in the log
-    ciop-log "DEBUG" "Coherence properties file created: ${outputCohTIF_properties}"
-    # create properties file for Intensity average tif product
-    descriptionSigmaAverage="Intensity average in dB of input SLC couple"
-    outputSigmaAverageTIF_properties=$( propertiesFileCratorTIF_IFG "${sigmaAverageName}" "${descriptionSigmaAverage}" "${dateMaster}" "${dateSlave}" "${dateDiff_days}" "${polarisation}" "${pixelSpacing}" "${SNAP_VERSION}" "${processingTime}" )
-    # report activity in the log
-    ciop-log "DEBUG" "Backscatter average properties file created: ${outputSigmaAverageTIF_properties}"
-    # create properties file for Intensity difference average tif product
-    descriptionSigmaDiff="Intensity difference in dB of input SLC couple"
-    outputSigmaDiffTIF_properties=$( propertiesFileCratorTIF_IFG "${sigmaDiffName}" "${descriptionSigmaDiff}" "${dateMaster}" "${dateSlave}" "${dateDiff_days}" "${polarisation}" "${pixelSpacing}" "${SNAP_VERSION}" "${processingTime}" )
-    # report activity in the log
-    ciop-log "DEBUG" "Backscatter difference properties file created: ${outputSigmaDiffTIF_properties}"
-    # create properties file for Intensity Master tif product
-    descriptionSigmaMaster="Intensity in dB of the Master product"
-    outputSigmaMasterTIF_properties=$( propertiesFileCratorTIF_OneBand "${sigmaMasterName}" "${descriptionSigmaMaster}" "${dateMaster}" "${polarisation}" "${pixelSpacing}" "${SNAP_VERSION}" "${processingTime}" )
-    # report activity in the log
-    ciop-log "DEBUG" "Master Backscatter properties file created: ${outputSigmaMasterTIF_properties}"
-    # create properties file for Intensity Slave tif product
-    descriptionSigmaSlave="Intensity in dB of the Slave product"
-    outputSigmaSlaveTIF_properties=$( propertiesFileCratorTIF_OneBand "${sigmaSlaveName}" "${descriptionSigmaSlave}" "${dateSlave}" "${polarisation}" "${pixelSpacing}" "${SNAP_VERSION}" "${processingTime}" )
-    # report activity in the log
-    ciop-log "DEBUG" "Slave Backscatter properties file created: ${outputSigmaSlaveTIF_properties}"
-    # create properties file for RGB composite tif product
-    descriptionRgbComposite="Coherence and Intensity RGB composite"
-    outputRgbCompositeNameTIF_properties=$( propertiesFileCratorTIF_IFG "${rgbCompositeName}" "${descriptionRgbComposite}" "${dateMaster}" "${dateSlave}" "${dateDiff_days}" "${polarisation}" "${pixelSpacing}" "${SNAP_VERSION}" "${processingTime}" )
-    # report activity in the log
-    ciop-log "DEBUG" "Combined RGB product properties file created: ${outputRgbCompositeNameTIF_properties}"    
-    # create properties file for RGB composite tif product
-    descriptionRgbComposite="Amplitude Change RGB Composite"
-    outputRgbCompositeNameTIF_properties=$( propertiesFileCratorTIF_IFG "${sigmaMasterSlaveComposite}" "${descriptionRgbComposite}" "${dateMaster}" "${dateSlave}" "${dateDiff_days}" "${polarisation}" "${pixelSpacing}" "${SNAP_VERSION}" "${processingTime}" )
-    # report activity in the log
-    ciop-log "DEBUG" "Combined RGB product properties file created: ${outputRgbCompositeNameTIF_properties}"
-    
-    # publish the ESA SNAP results
-    ciop-log "INFO" "Publishing Output Products" 
-    ciopPublishOut=$( ciop-publish -m "${OUTPUTDIR}"/* )
-    
+		# report activity in the log
+		ciop-log "INFO" "Creating properties files"
+		# create properties file for coherence tif product
+		descriptionCoh="Coherence computed on input SLC couple"
+		outputCohTIF_properties=$( propertiesFileCratorTIF_IFG "${coherenceName}" "${descriptionCoh}" "${dateMaster}" "${dateSlave}" "${dateDiff_days}" "${polarisation}" "${pixelSpacing}" "${SNAP_VERSION}" "${processingTime}" )
+		# report activity in the log
+		ciop-log "DEBUG" "Coherence properties file created: ${outputCohTIF_properties}"
+		# create properties file for Intensity average tif product
+		descriptionSigmaAverage="Intensity average in dB of input SLC couple"
+		outputSigmaAverageTIF_properties=$( propertiesFileCratorTIF_IFG "${sigmaAverageName}" "${descriptionSigmaAverage}" "${dateMaster}" "${dateSlave}" "${dateDiff_days}" "${polarisation}" "${pixelSpacing}" "${SNAP_VERSION}" "${processingTime}" )
+		# report activity in the log
+		ciop-log "DEBUG" "Backscatter average properties file created: ${outputSigmaAverageTIF_properties}"
+		# create properties file for Intensity difference average tif product
+		descriptionSigmaDiff="Intensity difference in dB of input SLC couple"
+		outputSigmaDiffTIF_properties=$( propertiesFileCratorTIF_IFG "${sigmaDiffName}" "${descriptionSigmaDiff}" "${dateMaster}" "${dateSlave}" "${dateDiff_days}" "${polarisation}" "${pixelSpacing}" "${SNAP_VERSION}" "${processingTime}" )
+		# report activity in the log
+		ciop-log "DEBUG" "Backscatter difference properties file created: ${outputSigmaDiffTIF_properties}"
+		# create properties file for Intensity Master tif product
+		descriptionSigmaMaster="Intensity in dB of the Master product"
+		outputSigmaMasterTIF_properties=$( propertiesFileCratorTIF_OneBand "${sigmaMasterName}" "${descriptionSigmaMaster}" "${dateMaster}" "${polarisation}" "${pixelSpacing}" "${SNAP_VERSION}" "${processingTime}" )
+		# report activity in the log
+		ciop-log "DEBUG" "Master Backscatter properties file created: ${outputSigmaMasterTIF_properties}"
+		# create properties file for Intensity Slave tif product
+		descriptionSigmaSlave="Intensity in dB of the Slave product"
+		outputSigmaSlaveTIF_properties=$( propertiesFileCratorTIF_OneBand "${sigmaSlaveName}" "${descriptionSigmaSlave}" "${dateSlave}" "${polarisation}" "${pixelSpacing}" "${SNAP_VERSION}" "${processingTime}" )
+		# report activity in the log
+		ciop-log "DEBUG" "Slave Backscatter properties file created: ${outputSigmaSlaveTIF_properties}"
+		# create properties file for RGB composite tif product
+		descriptionRgbComposite="Coherence and Intensity RGB composite"
+		outputRgbCompositeNameTIF_properties=$( propertiesFileCratorTIF_IFG "${rgbCompositeName}" "${descriptionRgbComposite}" "${dateMaster}" "${dateSlave}" "${dateDiff_days}" "${polarisation}" "${pixelSpacing}" "${SNAP_VERSION}" "${processingTime}" )
+		# report activity in the log
+		ciop-log "DEBUG" "Combined RGB product properties file created: ${outputRgbCompositeNameTIF_properties}"    
+		# create properties file for RGB composite tif product
+		descriptionRgbComposite="Amplitude Change RGB Composite"
+		outputRgbCompositeNameTIF_properties=$( propertiesFileCratorTIF_IFG "${sigmaMasterSlaveComposite}" "${descriptionRgbComposite}" "${dateMaster}" "${dateSlave}" "${dateDiff_days}" "${polarisation}" "${pixelSpacing}" "${SNAP_VERSION}" "${processingTime}" )
+		# report activity in the log
+		ciop-log "DEBUG" "Combined RGB product properties file created: ${outputRgbCompositeNameTIF_properties}"
+		# publish the ESA SNAP results
+		ciop-log "INFO" "Publishing Output Products" 
+		ciopPublishOut=$( ciop-publish -m "${OUTPUTDIR}"/* )
+	else
+		### FULL RESOLUTION PRODUCTS GENERATION
+		# report activity in the log
+    	ciop-log "INFO" "Pixel spacing is: {pixelSpacingInMeter}, its < 30, therefore chosen for bandmath method of creating visualization products."
+
+		ciop-log "INFO" "Creating full resolution visualization products"
+		## Create RGB composite R=coherence G=sigmaAverage B=null
+		rgbCompositeNameTIF=${rgbCompositeName}.tif
+		# Full Resolution product 8 bit encoded 
+		rgbCompositeNameFullResTIF=${rgbCompositeName}.rgb.tif
+		green=${TMPDIR}/green_output.tif
+		red=${TMPDIR}/red_output.tif
+		blue=${TMPDIR}/blue_output.tif
+		#report activity in the log
+		ciop-log "INFO" "Prepare snap visualization bands for coherence and sigma on ${rgbCompositeNameTIF} with coherenceband set as: ${coherenceBand} resulting in ${green} and ${red} ${blue}"
+		# Pepare the snap request
+		SNAP_REQUEST=$( create_snap_visualization_bands_coh_sigma "${rgbCompositeNameTIF}" "${green}" "${blue}" "${coherenceBand}" "${red}" )
+		[ $? -eq 0 ] || return ${SNAP_REQUEST_ERROR}
+		[ $DEBUG -eq 1 ] && cat ${SNAP_REQUEST}
+		#report activity in the log
+		ciop-log "INFO" "Generated request file: ${SNAP_REQUEST}"
+		#report activity in the log
+		ciop-log "INFO" "Invoking SNAP-gpt on the generated request file to perform visualization preprocessing for coherence and sigma bands"  
+		#check the exit code
+		gpt $SNAP_REQUEST -c "${CACHE_SIZE}" &> /dev/null
+		# check the exit code
+		[ $? -eq 0 ] || return $ERR_SNAP
+		rgbMergeOutputTIF=${rgbCompositeName}.merged.tif
+		ciop-log "INFO" "Invoking gdalmerge on seperate band results of snap bandmath"
+		gdal_merge.py -separate -n 0 -a_nodata 0 -co "PHOTOMETRIC=RGB" -co "ALPHA=YES" "${red}" "${green}" "${blue}" -o ${rgbMergeOutputTIF} -co BIGTIFF=YES
+		returnCode=$?
+		[ $returnCode -eq 0 ] || return ${ERR_CONVERT}
+		#reprojection
+		ciop-log "INFO" "Invoking gdalwarp on gdalmerge+translate result"
+		gdalwarp -ot Byte -t_srs EPSG:3857 -srcnodata 0 -dstnodata 0 -dstalpha -co "TILED=YES" -co "BLOCKXSIZE=512" -co "BLOCKYSIZE=512" -co "PHOTOMETRIC=RGB" -co "ALPHA=YES" ${rgbMergeOutputTIF} ${rgbCompositeNameFullResTIF} -co BIGTIFF=YES
+		# gdalwarp -ot Byte -t_srs EPSG:3857 -r cubic ${rgbMergeOutputTIF} ${rgbCompositeNameFullResTIF}
+		returnCode=$?
+		[ $returnCode -eq 0 ] || return ${ERR_CONVERT}
+		# Add overviews
+		ciop-log "INFO" "Invoking gdaladdo on gdalwarp+merge+translate result"
+		gdaladdo -r average ${rgbCompositeNameFullResTIF} 2 4 8 16
+		returnCode=$?
+		[ $returnCode -eq 0 ] || return ${ERR_CONVERT}
+		rm ${pconvertOutRgbCompositeTIF}
+		# PNG output
+		rgbCompositeNameFullResPNG=${rgbCompositeName}.png
+		#pconvert -f png -p ${TMPDIR}/coh_sigmaAvg_null.rgb -s 0,0 -o ${TMPDIR} ${rgbCompositeNameTIF} &> /dev/null
+		# check the exit code
+		[ $? -eq 0 ] || return $ERR_PCONVERT
+		# output of pconvert
+		pconvertOutRgbCompositePNG=${TMPDIR}/${rgbCompositeBasename}.png
+		# remove black background
+		ciop-log "INFO" "Invoking gdaltranslate to create png of ${rgbMergeOutputTIF}"
+
+		gdal_translate -of png -scale -co worldfile=yes ${rgbMergeOutputTIF} ${pconvertOutRgbCompositePNG}
+		convert ${pconvertOutRgbCompositePNG} -alpha set -channel RGBA -fill none -opaque black ${rgbCompositeNameFullResPNG}
+		rm ${pconvertOutRgbCompositePNG}
+		# remove physical product
+		rm ${rgbCompositeNameTIF} ${rgbMergeOutputTIF}
+		#Normally also removed here: ${rgbMergeOutputTIF}
+		# visualization product is the unique generated output for the RGB combination
+		mv ${rgbCompositeNameFullResTIF} ${rgbCompositeNameTIF}
+		# Colorbar legend to be published 
+		colorbarInput=$_CIOP_APPLICATION_PATH/gpt/coh_sigmaAvg_null_colormap.png
+		# Output name of customized colorbar legend
+		rgbCompositeColorbarOutput=${rgbCompositeName}.tif.legend.png
+		cp ${colorbarInput} ${rgbCompositeColorbarOutput}
+		## Full resolution image creation for Sigma Master product
+		# Visualization product name
+		sigmaMasterNameFullResTIF=${sigmaMasterName}.rgb.tif
+		# Source band name 
+		sourceBand=${sigmaMasterBand}_db
+		# define min max values in dB for sigma visualization
+		min_val=-15
+		max_val=5
+		# call function for visualization product generator 
+		min_max_val=$( visualization_product_creator_one_band "${sigmaMasterName_TIF}" "${sourceBand}" "${min_val}" "${max_val}" "${sigmaMasterNameFullResTIF}" )
+		retCode=$?
+		[ $DEBUG -eq 1 ] && echo min_max_val $min_max_val
+		[ $retCode -eq 0 ] || return $retCode
+		# Colorbar legend to be customized with product statistics
+		colorbarInput=$_CIOP_APPLICATION_PATH/gpt/colorbar_gray.png #sample Gray Colorbar (as used by pconvert with single band products) colorbar image
+		# Output name of customized colorbar legend
+		sigmaMasterColorbarOutput=${sigmaMasterName}.tif.legend.png
+		# colorbar description
+		colorbarDescription="Sigma_0 Master [dB]"
+		#Customize colorbar with product statistics
+		retVal=$(colorbarCreator "${colorbarInput}" "${colorbarDescription}" ${min_max_val} "${sigmaMasterColorbarOutput}" )
+		## Full resolution image creation for Sigma Slave product
+		# Visualization product name
+		sigmaSlaveNameFullResTIF=${sigmaSlaveName}.rgb.tif
+		# Source band name
+		sourceBand=${sigmaSlaveBand}_db
+		# call function for visualization product generator
+		min_max_val=$( visualization_product_creator_one_band "${sigmaSlaveName_TIF}" "${sourceBand}" "${min_val}" "${max_val}" "${sigmaSlaveNameFullResTIF}" )
+		retCode=$?
+		[ $DEBUG -eq 1 ] && echo min_max_val $min_max_val
+		[ $retCode -eq 0 ] || return $retCode
+		# Output name of customized colorbar legend
+		sigmaSlaveColorbarOutput=${sigmaSlaveName}.tif.legend.png
+		# colorbar description
+		colorbarDescription="Sigma_0 Slave [dB]"
+		# Customize colorbar with product statistics
+		retVal=$(colorbarCreator "${colorbarInput}" "${colorbarDescription}" ${min_max_val} "${sigmaSlaveColorbarOutput}" )
+		## Full resolution image creation for Coeherence product
+		# Visualization product name
+		coherenceNameFullResTIF=${coherenceName}.rgb.tif
+		# Build source band name for statistics computation
+		sourceBand=${coherenceBand}
+		# define percentiles min max values for coherence visualization
+		min_val="pc2"
+		max_val="pc96"
+		# call function for visualization product generator
+		min_max_val=$( visualization_product_creator_one_band "${coherenceName_TIF}" "${sourceBand}" "${min_val}" "${max_val}" "${coherenceNameFullResTIF}" )
+		retCode=$?
+		[ $DEBUG -eq 1 ] && echo min_max_val $min_max_val
+		[ $retCode -eq 0 ] || return $retCode
+		# Colorbar legend to be customized with product statistics
+		colorbarInput=$_CIOP_APPLICATION_PATH/gpt/colorbar_gray.png #sample Gray Colorbar (as used by pconvert with single band products) colorbar image
+		# Output name of customized colorbar legend
+		coherenceColorbarOutput=${coherenceName}.tif.legend.png
+		# colorbar description
+		colorbarDescription="Coherence"
+		# Customize colorbar with product statistics
+		retVal=$(colorbarCreator "${colorbarInput}" "${colorbarDescription}" ${min_max_val} "${coherenceColorbarOutput}" )
+		## Full resolution image creation for Sigma Average product
+		# Visualization product name
+		sigmaAverageNameFullResTIF=${sigmaAverageName}.rgb.tif
+		# Build source band name for statistics computation
+		sourceBand="sigmaAverage"
+		# define min max values for sigma average visualization
+		min_val=-15
+		max_val=5
+		# call function for visualization product generator
+		min_max_val=$( visualization_product_creator_one_band "${sigmaAverageName_TIF}" "${sourceBand}" "${min_val}" "${max_val}" "${sigmaAverageNameFullResTIF}" )
+		retCode=$?
+		[ $DEBUG -eq 1 ] && echo min_max_val $min_max_val
+		[ $retCode -eq 0 ] || return $retCode
+		# Colorbar legend to be customized with product statistics
+		colorbarInput=$_CIOP_APPLICATION_PATH/gpt/colorbar_gray.png #sample Gray Colorbar (as used by pconvert with single band products) colorbar image
+		# Output name of customized colorbar legend
+		sigmaAverageColorbarOutput=${sigmaAverageName}.tif.legend.png
+		# colorbar description
+		colorbarDescription="Sigma_0 Average [dB]"
+		#Customize colorbar with product statistics
+		retVal=$(colorbarCreator "${colorbarInput}" "${colorbarDescription}" ${min_max_val} "${sigmaAverageColorbarOutput}" )
+		## Full resolution image creation for Sigma Difference product
+		# Visualization product name
+		sigmaDiffNameFullResTIF=${sigmaDiffName}.rgb.tif
+		# Build source band name for statistics computation
+		sourceBand="sigmaDiff"
+		# define min max percebtiles values for sigma average visualization
+		min_val="pc2"
+		max_val="pc96"
+		# call function for visualization product generator
+		min_max_val=$( visualization_product_creator_one_band "${sigmaDiffName_TIF}" "${sourceBand}" "${min_val}" "${max_val}" "${sigmaDiffNameFullResTIF}" )
+		retCode=$?
+		[ $DEBUG -eq 1 ] && echo min_max_val $min_max_val
+		[ $retCode -eq 0 ] || return $retCode
+		# Colorbar legend to be customized with product statistics
+		colorbarInput=$_CIOP_APPLICATION_PATH/gpt/colorbar_gray.png #sample Gray Colorbar (as used by pconvert with single band products) colorbar image
+		# Output name of customized colorbar legend
+		sigmaDiffColorbarOutput=${sigmaDiffName}.tif.legend.png
+		# colorbar description
+		colorbarDescription="Sigma_0 Difference [dB]"
+		# Customize colorbar with product statistics
+		retVal=$(colorbarCreator "${colorbarInput}" "${colorbarDescription}" ${min_max_val} "${sigmaDiffColorbarOutput}" )
+		## Create RGB composite R=sigma master G=sigma slave B=sigma slave
+		sigmaMasterSlaveCompositeTIF=${sigmaMasterSlaveComposite}.tif
+		sigmaMasterSlaveCompositeClip_TIF=${sigmaMasterSlaveComposite}_clip.tif
+		# Clip values between -15 and +5 dB 
+		# report activity in the log
+		ciop-log "INFO" "Preparing SNAP request file to clip Backscatter master and slave values"
+		min_val=-15
+		max_val=5
+		# prepare the SNAP request
+		SNAP_REQUEST=$( create_snap_sigmaMasterSlave_clip "${sigmaMasterSlaveCompositeTIF}" "${sigmaMasterBand}_db" "${sigmaSlaveBand}_db" "${min_val}" "${max_val}" "${sigmaMasterSlaveCompositeClip_TIF}" )
+		[ $? -eq 0 ] || return ${SNAP_REQUEST_ERROR}
+		[ $DEBUG -eq 1 ] && cat ${SNAP_REQUEST}
+		# report activity in the log
+		ciop-log "INFO" "Generated request file: ${SNAP_REQUEST}"
+		# report activity in the log
+		ciop-log "INFO" "Invoking SNAP-gpt on the generated request file clip Backscatter master and slave values"
+		# invoke the ESA SNAP toolbox
+		gpt $SNAP_REQUEST -c "${CACHE_SIZE}" &> /dev/null
+		# check the exit code
+		[ $? -eq 0 ] || return $ERR_SNAP
+		# Full Resolution product 8 bit encoded
+		# The output for the RGB combination is a couple of visualization products
+		# - A GeoTiff to be displayed on the map
+		# - A PNG file  
+		rm ${sigmaMasterSlaveCompositeTIF}
+		sigmaMasterSlaveCompositeFullResTIF=${sigmaMasterSlaveCompositeTIF}
+		#Creation names output tif and png
+		pconvertOutTIF=${TMPDIR}/${sigmaMasterSlaveCompositeBasename}_clip.tif
+		pconvertOutPNG=${TMPDIR}/${sigmaMasterSlaveCompositeBasename}_clip.png    
+
+		ciop-log "INFO" "Invoking gdaltranslate to create a sigma master slave composite clip tif"
+		#Create a tif from making a sigma master slave composite, with gdal translate and perform scaling		
+		gdal_translate -ot Byte -of GTiff -b 2 -b 1 -b 1 -scale -15 0 0 255 -co PHOTOMETRIC=RGB ${sigmaMasterSlaveCompositeClip_TIF}  ${pconvertOutTIF}	
+		returnCode=$?
+		[ $returnCode -eq 0 ] || return ${ERR_PCONVERT}
+		# PNG creation
+		ciop-log "INFO" "Invoking gdal to create a sigma master slave composite clip png"
+		gdal_translate -of png -scale -co worldfile=yes ${pconvertOutTIF} ${pconvertOutPNG}
+
+		# check the exit code
+		returnCode=$?
+		[ $returnCode -eq 0 ] || return ${ERR_PCONVERT}
+
+		#[ $? -eq 0 ] || return $ERR_PCONVERT
+		sigmaMasterSlaveCompositeFullResPNG=${sigmaMasterSlaveComposite}.png
+		mv ${pconvertOutPNG} ${sigmaMasterSlaveCompositeFullResPNG}
+		# reprojection
+		ciop-log "INFO" "Invoking gdal to create a warp of sigma master slave composite clip tif"
+
+		gdalwarp -ot Byte -t_srs EPSG:3857 -srcalpha -dstalpha -co "TILED=YES" -co "BLOCKXSIZE=512" -co "BLOCKYSIZE=512" -co "PHOTOMETRIC=RGB" -co "ALPHA=YES" ${pconvertOutTIF} ${sigmaMasterSlaveCompositeFullResTIF} -co BIGTIFF=YES
+		#Add overviews
+		ciop-log "INFO" "Invoking gdal to create a gdaladdo of sigma master slave composite clip tif"
+		gdaladdo -r average ${sigmaMasterSlaveCompositeFullResTIF} 2 4 8 16 
+		returnCode=$?
+		[ $returnCode -eq 0 ] || return ${ERR_CONVERT}
+		rm ${pconvertOutTIF}  ${sigmaMasterSlaveCompositeClip_TIF} 
+		#Normally also removed here: ${sigmaMasterSlaveCompositeClip_TIF}
+		# Colorbar legend to be customized with product statistics
+		colorbarInput=$_CIOP_APPLICATION_PATH/gpt/rgb_cube_sigmaS_sigmaM_sigmaM.png # RGB cube
+		# Output name of customized colorbar legend
+		sigmaMasterSlaveCompositeColorbarOutput=${sigmaMasterSlaveComposite}.tif.legend.png
+		# colorbar description
+		colorbarDescription="Amplitude Change RGB Composite"
+		#Customize colorbar with product statistics
+		retVal=$(colorbarCreatorRGB "${colorbarInput}" "${colorbarDescription}" "${min_val}" "${max_val}" "${min_val}" "${max_val}" "${min_val}" "${max_val}" "${sigmaMasterSlaveCompositeColorbarOutput}" )
+
+		# get timing info for the tif properties file
+		dateStart_s=$(date -d "${dateMaster}" +%s)
+		dateStop_s=$(date -d "${dateSlave}" +%s)
+		dateDiff_s=$(echo "scale=0; $dateStop_s-$dateStart_s" | bc )
+		secondsPerDay="86400"
+		dateDiff_days=$(echo "scale=0; $dateDiff_s/$secondsPerDay" | bc )
+		pixelSpacing=${pixelSpacingInMeter}m
+		processingTime=$( date )
+
+		# report activity in the log
+		ciop-log "INFO" "Creating properties files"
+		# create properties file for coherence tif product
+		descriptionCoh="Coherence computed on input SLC couple"
+		outputCohTIF_properties=$( propertiesFileCratorTIF_IFG "${coherenceName}" "${descriptionCoh}" "${dateMaster}" "${dateSlave}" "${dateDiff_days}" "${polarisation}" "${pixelSpacing}" "${SNAP_VERSION}" "${processingTime}" )
+		# report activity in the log
+		ciop-log "DEBUG" "Coherence properties file created: ${outputCohTIF_properties}"
+		# create properties file for Intensity average tif product
+		descriptionSigmaAverage="Intensity average in dB of input SLC couple"
+		outputSigmaAverageTIF_properties=$( propertiesFileCratorTIF_IFG "${sigmaAverageName}" "${descriptionSigmaAverage}" "${dateMaster}" "${dateSlave}" "${dateDiff_days}" "${polarisation}" "${pixelSpacing}" "${SNAP_VERSION}" "${processingTime}" )
+		# report activity in the log
+		ciop-log "DEBUG" "Backscatter average properties file created: ${outputSigmaAverageTIF_properties}"
+		# create properties file for Intensity difference average tif product
+		descriptionSigmaDiff="Intensity difference in dB of input SLC couple"
+		outputSigmaDiffTIF_properties=$( propertiesFileCratorTIF_IFG "${sigmaDiffName}" "${descriptionSigmaDiff}" "${dateMaster}" "${dateSlave}" "${dateDiff_days}" "${polarisation}" "${pixelSpacing}" "${SNAP_VERSION}" "${processingTime}" )
+		# report activity in the log
+		ciop-log "DEBUG" "Backscatter difference properties file created: ${outputSigmaDiffTIF_properties}"
+		# create properties file for Intensity Master tif product
+		descriptionSigmaMaster="Intensity in dB of the Master product"
+		outputSigmaMasterTIF_properties=$( propertiesFileCratorTIF_OneBand "${sigmaMasterName}" "${descriptionSigmaMaster}" "${dateMaster}" "${polarisation}" "${pixelSpacing}" "${SNAP_VERSION}" "${processingTime}" )
+		# report activity in the log
+		ciop-log "DEBUG" "Master Backscatter properties file created: ${outputSigmaMasterTIF_properties}"
+		# create properties file for Intensity Slave tif product
+		descriptionSigmaSlave="Intensity in dB of the Slave product"
+		outputSigmaSlaveTIF_properties=$( propertiesFileCratorTIF_OneBand "${sigmaSlaveName}" "${descriptionSigmaSlave}" "${dateSlave}" "${polarisation}" "${pixelSpacing}" "${SNAP_VERSION}" "${processingTime}" )
+		# report activity in the log
+		ciop-log "DEBUG" "Slave Backscatter properties file created: ${outputSigmaSlaveTIF_properties}"
+		# create properties file for RGB composite tif product
+		descriptionRgbComposite="Coherence and Intensity RGB composite"
+		outputRgbCompositeNameTIF_properties=$( propertiesFileCratorTIF_IFG "${rgbCompositeName}" "${descriptionRgbComposite}" "${dateMaster}" "${dateSlave}" "${dateDiff_days}" "${polarisation}" "${pixelSpacing}" "${SNAP_VERSION}" "${processingTime}" )
+		# report activity in the log
+		ciop-log "DEBUG" "Combined RGB product properties file created: ${outputRgbCompositeNameTIF_properties}"    
+		# create properties file for RGB composite tif product
+		descriptionRgbComposite="Amplitude Change RGB Composite"
+		outputRgbCompositeNameTIF_properties=$( propertiesFileCratorTIF_IFG "${sigmaMasterSlaveComposite}" "${descriptionRgbComposite}" "${dateMaster}" "${dateSlave}" "${dateDiff_days}" "${polarisation}" "${pixelSpacing}" "${SNAP_VERSION}" "${processingTime}" )
+		# report activity in the log
+		ciop-log "DEBUG" "Combined RGB product properties file created: ${outputRgbCompositeNameTIF_properties}"
+                # publish the ESA SNAP results
+
+	        ciop-log "INFO" "Publishing Output Products"
+                ciopPublishOut=$( ciop-publish -m "${OUTPUTDIR}"/* )
+
+    fi
+	
     # cleanup temp dir and output dir 
     rm -rf  "${TMPDIR}"/* "${OUTPUTDIR}"/* 
     # cleanup output products generated by the previous task
