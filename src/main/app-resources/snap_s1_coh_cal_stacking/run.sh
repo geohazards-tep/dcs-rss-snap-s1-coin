@@ -7,7 +7,7 @@ source ${ciop_job_include}
 source $_CIOP_APPLICATION_PATH/gpt/snap_include.sh
 
 ## put /opt/anaconda/bin ahead to the PATH list to ensure gdal to point to the anaconda installation dir
-export PATH=/opt/anaconda/bin:${PATH}
+#export PATH=/opt/anaconda/bin:${PATH}
 
 
 
