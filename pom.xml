@@ -53,7 +53,7 @@
 		    <require>gdal-python</require>
 		    <require>miniconda</require>
 		    <require>openjpeg2</require>
-		    <require>proj-develop</require>	
+		    <require>proj-devel</require>	
                   </requires>
 	          <postinstallScriptlet combine.self="override">
                     <script>conda update conda -y &amp;&amp; conda install --file /application/dependencies/python/packages.list</script>
