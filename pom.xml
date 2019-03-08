@@ -11,7 +11,7 @@
     <version>3.0.1-docker</version>
   </parent>
   <description>SNAP COherence and INtensity (COIN) chain for GEP</description>
-  <version>1.4.9</version>
+  <version>1.5.5</version>
   <properties>
     <summary>SNAP COherence and INtensity (COIN) chain for GEP</summary>
     <description>SNAP COherence and INtensity (COIN) chain for GEP</description>
@@ -50,7 +50,14 @@
                     <require>snap = 5.0-1.el6</require>
                     <require>ImageMagick</require>
                     <require>gdal</require>
+                    <require>gdal-python</require>
+                    <require>miniconda</require>
+                    <require>openjpeg2</require>
+                    <require>proj-devel</require>
                   </requires>
+                  <postinstallScriptlet combine.self="override">
+                    <script>conda update conda -y &amp;&amp; conda install --file /application/dependencies/python/packages.list</script>
+                  </postinstallScriptlet>
                 </configuration>
               </execution>
             </executions>
