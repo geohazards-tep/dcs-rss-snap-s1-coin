@@ -7,11 +7,12 @@ source ${ciop_job_include}
 source $_CIOP_APPLICATION_PATH/gpt/snap_include.sh
 
 ## put /opt/anaconda/bin ahead to the PATH list to ensure gdal to point to the anaconda installation dir
+#export PATH=/home/rssuser/anaconda2/bin:${PATH}
 export PATH=/opt/anaconda/bin:${PATH}
 
 
 
-# define the exit codes
+ #define the exit codes
 SUCCESS=0
 ERR_NODATA=1
 SNAP_REQUEST_ERROR=2
@@ -1809,10 +1810,12 @@ function main() {
     sigmaAverageName_TIF=${sigmaAverageName}.tif
     # sigma difference product
     sigmaDiffName_TIF=${sigmaDiffName}.tif
-    if (( "${pixelSpacingInMeter}" >= "30" )); then
+    if  (( $(echo "$pixelSpacingInMeter >= 30" |bc -l) )) ; then
+   
+#if (( "${pixelSpacingInMeter}" >= "30" )); then
 		### FULL RESOLUTION PRODUCTS GENERATION
 		# report activity in the log
-		ciop-log "INFO" "Pixel spacing is: {pixelSpacingInMeter}, its >= 30 meter, therefore chosen for pconvert method of creating visualization products."
+		ciop-log "INFO" "Pixel spacing is: ${pixelSpacingInMeter}, its >= 30 meter, therefore chosen for pconvert method of creating visualization products."
 
 		ciop-log "INFO" "Creating full resolution visualization products"
 		## Create RGB composite R=coherence G=sigmaAverage B=null
@@ -2266,7 +2269,8 @@ EOF
 
 		ciop-log "INFO" "Invoking gdaltranslate to create a sigma master slave composite clip tif"
 		#Create a tif from making a sigma master slave composite, with gdal translate and perform scaling		
-		gdal_translate -ot Byte -of GTiff -b 2 -b 1 -b 1 -scale -15 0 0 255 -co PHOTOMETRIC=RGB ${sigmaMasterSlaveCompositeClip_TIF}  ${pconvertOutTIF}	
+#		gdal_translate -ot Byte -of GTiff -b 2 -b 1 -b 1 -scale -15 0 0 255 -co PHOTOMETRIC=RGB ${sigmaMasterSlaveCompositeClip_TIF}  ${pconvertOutTIF}	
+		gdal_translate -ot Byte -of GTiff -b 2 -b 1 -b 1 -a_nodata 0 -scale -15 0 1 255 -co PHOTOMETRIC=RGB ${sigmaMasterSlaveCompositeClip_TIF}  ${pconvertOutTIF}
 		returnCode=$?
 		[ $returnCode -eq 0 ] || return ${ERR_PCONVERT}
 		# PNG creation
@@ -2282,8 +2286,8 @@ EOF
 		mv ${pconvertOutPNG} ${sigmaMasterSlaveCompositeFullResPNG}
 		# reprojection
 		ciop-log "INFO" "Invoking gdal to create a warp of sigma master slave composite clip tif"
-
-		gdalwarp -ot Byte -t_srs EPSG:3857 -srcalpha -dstalpha -co "TILED=YES" -co "BLOCKXSIZE=512" -co "BLOCKYSIZE=512" -co "PHOTOMETRIC=RGB" -co "ALPHA=YES" ${pconvertOutTIF} ${sigmaMasterSlaveCompositeFullResTIF} -co BIGTIFF=YES
+	 	gdalwarp -ot Byte -t_srs EPSG:3857 -srcnodata 0 -dstnodata 0 -dstalpha -co "TILED=YES" -co "BLOCKXSIZE=512" -co "BLOCKYSIZE=512" -co "PHOTOMETRIC=RGB" -co "ALPHA=YES" ${pconvertOutTIF} ${sigmaMasterSlaveCompositeFullResTIF} -co BIGTIFF=YES
+	#	gdalwarp -ot Byte -t_srs EPSG:3857 -srcalpha -dstalpha -co "TILED=YES" -co "BLOCKXSIZE=512" -co "BLOCKYSIZE=512" -co "PHOTOMETRIC=RGB" -co "ALPHA=YES" ${pconvertOutTIF} ${sigmaMasterSlaveCompositeFullResTIF} -co BIGTIFF=YES
 		#Add overviews
 		ciop-log "INFO" "Invoking gdal to create a gdaladdo of sigma master slave composite clip tif"
 		gdaladdo -r average ${sigmaMasterSlaveCompositeFullResTIF} 2 4 8 16 
