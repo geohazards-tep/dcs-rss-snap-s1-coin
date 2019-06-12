@@ -154,10 +154,10 @@ function create_snap_request_orb_cal_back_esd() {
     </sources>
     <parameters class="com.bc.ceres.binding.dom.XppDomElement">
       <demName>${demType}</demName>
-      <demResamplingMethod>BICUBIC_INTERPOLATION</demResamplingMethod>
+      <demResamplingMethod>BISINC_21_POINT_INTERPOLATION</demResamplingMethod>
       <externalDEMFile/>
       <externalDEMNoDataValue>0.0</externalDEMNoDataValue>
-      <resamplingType>BISINC_5_POINT_INTERPOLATION</resamplingType>
+      <resamplingType>BISINC_21_POINT_INTERPOLATION</resamplingType>
       <maskOutAreaWithoutElevation>false</maskOutAreaWithoutElevation>
       <outputRangeAzimuthOffset>false</outputRangeAzimuthOffset>
       <outputDerampDemodPhase>true</outputDerampDemodPhase>
