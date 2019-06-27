@@ -8,6 +8,8 @@ source ${ciop_job_include}
 #export PATH=${SNAP_HOME}/bin:${PATH}
 source $_CIOP_APPLICATION_PATH/gpt/snap_include.sh
 
+
+
 # define the exit codes
 SUCCESS=0
 SNAP_REQUEST_ERROR=1
@@ -28,7 +30,7 @@ ERR_GETACQMODE=15
 ERR_WRONGACQMODE=16
 ERR_GETPRODTYPE=17
 ERR_WRONGPRODTYPE=18
-
+ERR_WRONGLATITUDE=19
 
 # add a trap to exit gracefully
 function cleanExit ()
@@ -56,6 +58,7 @@ function cleanExit ()
         ${ERR_WRONGACQMODE})      msg="Wrong acquisition mode retrieved from input product name, only IW is allowed";;
         ${ERR_GETPRODTYPE})       msg="Error while retrieving product type info from input product name";;
         ${ERR_WRONGPRODTYPE})     msg="Wrong product type retrieved from input product name, only SLC is allowed";;
+	${ERR_WRONGLATITUDE})	  msg="Wrong Latitude, too far NORTH / SOUTH, use GETASSE30 DEM instead";;
         *)                        msg="Unknown error";;
     esac
 
@@ -294,7 +297,8 @@ function main() {
     local master="${inputfiles[0]}"        
 
     local slave="`ciop-getparam slave`"
-
+    local demType="`ciop-getparam demtype`"
+    ciop-log "INFO" "DEM is ${demType}"
     # run a check on the master value, it can't be empty
     [ -z "$master" ] && exit $ERR_NOMASTER
 
@@ -463,6 +467,18 @@ function main() {
 
     # report Master retrieving activity in log
     ciop-log "INFO" "Retrieving ${master}"
+    if [[ "${demType}" == "SRTM 3Sec" ]]; then
+         lower_lat=$( curl "${master}"  2>/dev/null | jq '.features[].geometry.coordinates[][1][1]')
+         upper_lat=$( curl "${master}"  2>/dev/null | jq '.features[].geometry.coordinates[][2][1]')
+         ciop-log "INFO" "master upper latitude is: ${upper_lat}, and the lower latitude is: ${lower_lat}"
+
+         if (( $(echo "$lower_lat < -54" |bc -l) )) ; then
+                return $ERR_WRONGLATITUDE
+         fi
+         if (( $(echo "$upper_lat > 60" |bc -l) )); then
+                return $ERR_WRONGLATITUDE
+         fi
+    fi
 
     # retrieve the MASTER product to the local temporary folder TMPDIR provided by the framework (this folder is only used by this process)
     # the utility returns the local path so the variable $retrievedMaster contains the local path to the MASTER product
@@ -472,8 +488,6 @@ function main() {
     if [[ -d "$retrievedMaster" ]]; then
         retrievedMaster=$(find ${retrievedMaster} -name 'manifest.safe')
     fi
-    #masterTmp=/tmp/snap/S1A_IW_SLC__1SDV_20151103T101314_20151103T101341_008439_00BED5_B751.SAFE.zip
-    #retrievedMaster=$( ciop-copy -U -o $TMPDIR "$masterTmp" )
 
     # check if the file was retrievedMaster, if not exit with the error code $ERR_NORETRIEVEDMASTER
     #[ $? -eq 0 ] && [ -e "${retrievedMaster}" ] || return ${ERR_NORETRIEVEDMASTER}
@@ -482,8 +496,9 @@ function main() {
          return $ERR_NORETRIEVEDMASTER
     fi
     [ $DEBUG -eq 1 ] && cat ${TMPDIR}/ciop_copy.stderr
+    ciop-log "INFO" "the master is ${retrievedMaster}"
     mastername=$( basename "$retrievedMaster" )
-
+    
     # report activity in the log
     ciop-log "INFO" "Master product correctly retrieved: ${mastername}"
 	
@@ -550,7 +565,7 @@ function main() {
 	gpt $SNAP_REQUEST -c 2048M &> /dev/null
     	# check the exit code
     	[ $? -eq 0 ] || return $ERR_SNAP            
-        
+ 
         # compress splitting results for the current subswath
         cd ${OUTPUTDIR}
         if [ $DEBUG -eq 1 ] ; then
